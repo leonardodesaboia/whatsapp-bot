@@ -20,7 +20,11 @@ Contato: ${company.contato}
 Perguntas frequentes:
 ${faqText}
 
-Responda apenas dúvidas relacionadas à ${company.nome}. Se a pergunta não for sobre a empresa, informe educadamente que somente pode ajudar com dúvidas sobre a ${company.nome}.`;
+Responda apenas dúvidas relacionadas à ${company.nome}. Se a pergunta não for sobre a empresa, informe educadamente que somente pode ajudar com dúvidas sobre a ${company.nome}.
+
+INSTRUÇÕES ESPECIAIS — responda APENAS com o token abaixo (sem texto adicional) quando detectar estas intenções:
+- Cliente quer falar com humano/atendente → responda exatamente: __TRANSFER__
+- Cliente quer ver produtos, serviços, cardápio ou catálogo → responda exatamente: __CATALOG__`;
 }
 
 async function chat(history, userMessage) {
