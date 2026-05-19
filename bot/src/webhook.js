@@ -5,6 +5,8 @@ const { getState, setState, clearState, setHumanMode, isHumanMode } = require('.
 const { isOpen, getClosedMessage } = require('./businessHours');
 const { sendNotification } = require('./notify');
 const { handleCatalogFlow } = require('./catalog');
+const { handleSchedulingFlow } = require('./scheduling');
+const { handlePaymentFlow } = require('./payment');
 
 function isPrivateChat(remoteJid) {
   return remoteJid.endsWith('@s.whatsapp.net');
@@ -48,8 +50,15 @@ async function processMessage(phone, text) {
     await handleCatalogFlow(phone, state, text);
     return null;
   }
+  if (state.flow === 'scheduling') {
+    await handleSchedulingFlow(phone, state, text);
+    return null;
+  }
+  if (state.flow === 'payment') {
+    await handlePaymentFlow(phone, state, text);
+    return null;
+  }
 
-  // flows de scheduling e payment serão adicionados na Parte 2
   const history = await getHistory(phone);
   const reply = await chat(history, text);
 
@@ -60,6 +69,20 @@ async function processMessage(phone, text) {
   if (reply === '__CATALOG__') {
     await setState(phone, { flow: 'catalog', step: 0, data: {} });
     await handleCatalogFlow(phone, { flow: 'catalog', step: 0, data: {} }, text);
+    return null;
+  }
+  if (reply === '__SCHEDULE__') {
+    await setState(phone, { flow: 'scheduling', step: 0, data: {} });
+    await handleSchedulingFlow(phone, { flow: 'scheduling', step: 0, data: {} }, text);
+    return null;
+  }
+  if (reply?.startsWith('__PAYMENT__:')) {
+    const parts = reply.split(':');
+    const amount = parseFloat(parts[1]);
+    const description = parts.slice(2).join(':');
+    const newState = { flow: 'payment', step: 0, data: { amount, description } };
+    await setState(phone, newState);
+    await handlePaymentFlow(phone, newState, text);
     return null;
   }
 

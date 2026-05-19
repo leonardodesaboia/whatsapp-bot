@@ -22,6 +22,8 @@ jest.mock('../src/businessHours', () => ({
 }));
 jest.mock('../src/notify', () => ({ sendNotification: jest.fn() }));
 jest.mock('../src/catalog', () => ({ handleCatalogFlow: jest.fn() }));
+jest.mock('../src/scheduling', () => ({ handleSchedulingFlow: jest.fn() }));
+jest.mock('../src/payment', () => ({ handlePaymentFlow: jest.fn() }));
 
 const request = require('supertest');
 const express = require('express');
@@ -33,6 +35,8 @@ const { isHumanMode, setHumanMode, getState, setState, clearState } = require('.
 const { isOpen, getClosedMessage } = require('../src/businessHours');
 const { sendNotification } = require('../src/notify');
 const { handleCatalogFlow } = require('../src/catalog');
+const { handleSchedulingFlow } = require('../src/scheduling');
+const { handlePaymentFlow } = require('../src/payment');
 
 process.env.WEBHOOK_TOKEN = 'test-token';
 
@@ -53,6 +57,8 @@ beforeEach(() => {
   isHumanMode.mockResolvedValue(false);
   isOpen.mockReturnValue(true);
   getState.mockResolvedValue({ mode: 'bot', flow: null, step: 0, data: {} });
+  handleSchedulingFlow.mockResolvedValue(undefined);
+  handlePaymentFlow.mockResolvedValue(undefined);
 });
 
 test('retorna 401 sem token válido', async () => {
@@ -179,4 +185,38 @@ test('extractMessage lê de extendedTextMessage', () => {
 
 test('extractMessage retorna null para tipos não suportados', () => {
   expect(extractMessage({ message: { imageMessage: {} } })).toBeNull();
+});
+
+test('roteia para handleSchedulingFlow quando flow=scheduling', async () => {
+  getState.mockResolvedValue({ mode: 'bot', flow: 'scheduling', step: 1, data: {} });
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(handleSchedulingFlow).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'scheduling' }), 'Qual o horário de atendimento?');
+});
+
+test('roteia para handlePaymentFlow quando flow=payment', async () => {
+  getState.mockResolvedValue({ mode: 'bot', flow: 'payment', step: 1, data: {} });
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(handlePaymentFlow).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'payment' }), 'Qual o horário de atendimento?');
+});
+
+test('detecta __SCHEDULE__ e inicia flow de agendamento', async () => {
+  getHistory.mockResolvedValue([]);
+  chat.mockResolvedValue('__SCHEDULE__');
+  setState.mockResolvedValue(undefined);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(setState).toHaveBeenCalledWith('5511999999999', { flow: 'scheduling', step: 0, data: {} });
+  expect(handleSchedulingFlow).toHaveBeenCalled();
+});
+
+test('detecta __PAYMENT__ e inicia flow de pagamento', async () => {
+  getHistory.mockResolvedValue([]);
+  chat.mockResolvedValue('__PAYMENT__:50.00:Corte de cabelo');
+  setState.mockResolvedValue(undefined);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(setState).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'payment', data: { amount: 50, description: 'Corte de cabelo' } }));
+  expect(handlePaymentFlow).toHaveBeenCalled();
 });
