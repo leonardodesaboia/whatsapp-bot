@@ -1,0 +1,38 @@
+const OpenAI = require('openai');
+const fs = require('fs');
+const path = require('path');
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+function buildSystemPrompt() {
+  const company = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '../../company.json'), 'utf8')
+  );
+  const faqText = company.faq
+    .map((f) => `P: ${f.pergunta}\nR: ${f.resposta}`)
+    .join('\n\n');
+  return `Você é um assistente virtual da ${company.nome}.
+${company.descricao}
+Horário de atendimento: ${company.horario}
+Contato: ${company.contato}
+
+Perguntas frequentes:
+${faqText}
+
+Responda apenas dúvidas relacionadas à ${company.nome}. Se a pergunta não for sobre a empresa, informe educadamente que somente pode ajudar com dúvidas sobre a ${company.nome}.`;
+}
+
+async function chat(history, userMessage) {
+  const messages = [
+    { role: 'system', content: buildSystemPrompt() },
+    ...history,
+    { role: 'user', content: userMessage },
+  ];
+  const response = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    messages,
+  });
+  return response.choices[0].message.content;
+}
+
+module.exports = { chat, buildSystemPrompt };
