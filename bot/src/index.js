@@ -2,7 +2,11 @@ require('dotenv').config();
 const express = require('express');
 const { handleWebhook } = require('./webhook');
 const { registerWebhook } = require('./evolutionApi');
-const { handlePaymentWebhook } = require('./payment');
+const {
+  extractPaymentIdFromNotification,
+  verifyWebhookSignature,
+  handlePaymentWebhook,
+} = require('./payment');
 const { sendNotification } = require('./notify');
 const { rescheduleAllReminders } = require('./scheduling');
 const { sendBroadcast, loadContacts } = require('./broadcast');
@@ -11,6 +15,7 @@ const app = express();
 app.use(express.json());
 
 app.post('/webhook', handleWebhook);
+app.post('/webhook/:event', handleWebhook);
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
@@ -54,9 +59,41 @@ app.post('/broadcast', async (req, res) => {
 
 app.post('/payment/webhook', async (req, res) => {
   try {
-    const status = req.query['data.status'] || req.body?.status;
-    await handlePaymentWebhook(req.body, status);
+    if (req.body?.type && req.body.type !== 'payment') {
+      return res.sendStatus(200);
+    }
+
+    const secret = process.env.MERCADOPAGO_WEBHOOK_SECRET;
+    if (!secret) {
+      console.error('MERCADOPAGO_WEBHOOK_SECRET não configurado.');
+      return res.status(500).json({ error: 'Webhook secret is not configured' });
+    }
+
+    const paymentId = extractPaymentIdFromNotification(req.body, req.query);
+    if (!paymentId) {
+      return res.status(400).json({ error: 'Missing payment id' });
+    }
+
+    const isValidSignature = verifyWebhookSignature({
+      secret,
+      signatureHeader: req.headers['x-signature'],
+      requestId: req.headers['x-request-id'],
+      dataId: paymentId,
+    });
+
+    if (!isValidSignature) {
+      return res.status(401).json({ error: 'Invalid webhook signature' });
+    }
+
     res.sendStatus(200);
+
+    (async () => {
+      try {
+        await handlePaymentWebhook(req.body, req.query);
+      } catch (err) {
+        console.error('Erro ao processar webhook de pagamento:', err.message);
+      }
+    })();
   } catch (err) {
     console.error('Erro ao processar webhook de pagamento:', err.message);
     res.sendStatus(500);
@@ -81,6 +118,6 @@ app.listen(PORT, async () => {
     console.log(`Webhook registrado em ${botUrl}/webhook`);
   } catch (err) {
     console.warn('Aviso: não foi possível registrar webhook automaticamente.', err.message);
-    console.warn(`Registre manualmente: PUT ${process.env.EVOLUTION_API_URL}/webhook/set/${process.env.EVOLUTION_INSTANCE}`);
+    console.warn(`Registre manualmente: POST ${process.env.EVOLUTION_API_URL}/webhook/set/${process.env.EVOLUTION_INSTANCE}`);
   }
 });

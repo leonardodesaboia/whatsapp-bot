@@ -14,15 +14,17 @@ async function sendText(to, text) {
 }
 
 async function registerWebhook(botPublicUrl) {
-  await axios.put(
+  await axios.post(
     `${BASE_URL}/webhook/set/${INSTANCE}`,
     {
-      enabled: true,
-      url: `${botPublicUrl}/webhook`,
-      headers: { 'x-api-key': WEBHOOK_TOKEN },
-      byEvents: false,
-      base64: false,
-      events: ['MESSAGES_UPSERT'],
+      webhook: {
+        enabled: true,
+        url: `${botPublicUrl}/webhook`,
+        headers: { 'x-api-key': WEBHOOK_TOKEN },
+        webhookByEvents: true,
+        webhookBase64: false,
+        events: ['MESSAGES_UPSERT'],
+      },
     },
     { headers: { apikey: API_KEY } }
   );

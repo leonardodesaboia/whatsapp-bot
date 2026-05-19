@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const catalog = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '../../catalog.json'), 'utf8')
+  fs.readFileSync(path.join(__dirname, '../catalog.json'), 'utf8')
 );
 
 const { sendText, sendList } = require('./evolutionApi');
@@ -109,8 +109,7 @@ async function handleCatalogFlow(phone, state, text) {
       const { handlePaymentFlow } = require('./payment');
       await handlePaymentFlow(phone, newState, text);
     } else {
-      await clearState(phone);
-      await sendText(phone, 'Tudo bem! Como posso ajudar?');
+      await sendText(phone, 'Resposta inválida. Digite "agendar", "pagar" ou "cancelar".');
     }
   }
 }

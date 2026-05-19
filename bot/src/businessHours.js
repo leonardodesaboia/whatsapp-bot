@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const company = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '../../company.json'), 'utf8')
+  fs.readFileSync(path.join(__dirname, '../company.json'), 'utf8')
 );
 
 const DAY_MAP = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];

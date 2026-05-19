@@ -105,3 +105,21 @@ test('handleCatalogFlow "cancelar" limpa estado', async () => {
   await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 1, data: {} }, 'cancelar');
   expect(mockClearState).toHaveBeenCalledWith('5511999999999');
 });
+
+test('handleCatalogFlow step 3 mantém fluxo em resposta inválida', async () => {
+  mockSendText.mockResolvedValue(undefined);
+  await handleCatalogFlow(
+    '5511999999999',
+    {
+      flow: 'catalog',
+      step: 3,
+      data: { item: { title: 'Serviço Básico', price: 50, duration: 60 } },
+    },
+    'talvez'
+  );
+  expect(mockClearState).not.toHaveBeenCalled();
+  expect(mockSendText).toHaveBeenCalledWith(
+    '5511999999999',
+    expect.stringContaining('Resposta inválida')
+  );
+});

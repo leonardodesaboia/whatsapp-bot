@@ -1,7 +1,6 @@
 const mockPost = jest.fn();
-const mockPut = jest.fn();
 
-jest.mock('axios', () => ({ post: mockPost, put: mockPut }));
+jest.mock('axios', () => ({ post: mockPost }));
 
 process.env.EVOLUTION_API_URL = 'http://evolution:8080';
 process.env.EVOLUTION_API_KEY = 'test-api-key';
@@ -22,18 +21,20 @@ test('sendText envia POST para o endpoint correto com número e texto', async ()
   );
 });
 
-test('registerWebhook envia PUT com URL e token corretos', async () => {
-  mockPut.mockResolvedValue({ data: {} });
+test('registerWebhook envia POST com payload de webhook e token corretos', async () => {
+  mockPost.mockResolvedValue({ data: {} });
   await registerWebhook('http://bot:3000');
-  expect(mockPut).toHaveBeenCalledWith(
+  expect(mockPost).toHaveBeenCalledWith(
     'http://evolution:8080/webhook/set/test-instance',
     {
-      enabled: true,
-      url: 'http://bot:3000/webhook',
-      headers: { 'x-api-key': 'test-webhook-token' },
-      byEvents: false,
-      base64: false,
-      events: ['MESSAGES_UPSERT'],
+      webhook: {
+        enabled: true,
+        url: 'http://bot:3000/webhook',
+        headers: { 'x-api-key': 'test-webhook-token' },
+        webhookByEvents: true,
+        webhookBase64: false,
+        events: ['MESSAGES_UPSERT'],
+      },
     },
     { headers: { apikey: 'test-api-key' } }
   );

@@ -4,7 +4,7 @@ const { sendText } = require('./evolutionApi');
 
 function loadContacts() {
   const data = JSON.parse(
-    fs.readFileSync(path.join(__dirname, '../../contacts.json'), 'utf8')
+    fs.readFileSync(path.join(__dirname, '../contacts.json'), 'utf8')
   );
   return data.contacts || [];
 }

@@ -5,7 +5,7 @@ const path = require('path');
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const company = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '../../company.json'), 'utf8')
+  fs.readFileSync(path.join(__dirname, '../company.json'), 'utf8')
 );
 
 function buildSystemPrompt() {

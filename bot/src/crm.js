@@ -19,6 +19,7 @@ async function upsertLead(phone, name, lastMessage) {
        VALUES ($1, $2, $3, NOW(), $4)
        ON CONFLICT (phone) DO UPDATE SET
          name = COALESCE(leads.name, EXCLUDED.name),
+         stage_id = COALESCE(leads.stage_id, EXCLUDED.stage_id),
          last_message = EXCLUDED.last_message,
          last_seen_at = NOW(),
          updated_at = NOW()`,

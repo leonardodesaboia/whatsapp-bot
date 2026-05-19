@@ -1,4 +1,5 @@
 const mockPaymentCreate = jest.fn();
+const mockPaymentGet = jest.fn();
 const mockSendText = jest.fn();
 const mockSendImageBase64 = jest.fn();
 const mockSendNotification = jest.fn();
@@ -10,6 +11,7 @@ jest.mock('mercadopago', () => ({
   MercadoPagoConfig: jest.fn(),
   Payment: jest.fn().mockImplementation(() => ({
     create: mockPaymentCreate,
+    get: mockPaymentGet,
   })),
 }));
 
@@ -31,8 +33,15 @@ jest.mock('../src/state', () => ({
 }));
 
 process.env.MERCADOPAGO_ACCESS_TOKEN = 'test-token';
+process.env.MERCADOPAGO_WEBHOOK_SECRET = 'test-secret';
 
-const { createPixCharge, handlePaymentFlow, handlePaymentWebhook } = require('../src/payment');
+const {
+  createPixCharge,
+  extractPaymentIdFromNotification,
+  verifyWebhookSignature,
+  handlePaymentFlow,
+  handlePaymentWebhook,
+} = require('../src/payment');
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -102,14 +111,53 @@ test('handlePaymentWebhook notifica cliente e limpa estado quando aprovado', asy
   mockGetState.mockResolvedValue({ flow: 'payment', step: 2, data: { paymentId: 999 } });
   mockClearState.mockResolvedValue(undefined);
   mockSendNotification.mockResolvedValue(undefined);
-  await handlePaymentWebhook({ external_reference: '5511999999999' }, 'approved');
+  mockPaymentGet.mockResolvedValue({ id: 999, status: 'approved', external_reference: '5511999999999' });
+  await handlePaymentWebhook({ type: 'payment', data: { id: '999' } });
   expect(mockSendNotification).toHaveBeenCalledWith('5511999999999', expect.stringContaining('recebido'));
   expect(mockClearState).toHaveBeenCalledWith('5511999999999');
 });
 
 test('handlePaymentWebhook ignora pagamentos não aprovados', async () => {
-  await handlePaymentWebhook({ external_reference: '5511999999999' }, 'pending');
+  mockPaymentGet.mockResolvedValue({ id: 999, status: 'pending', external_reference: '5511999999999' });
+  await handlePaymentWebhook({ type: 'payment', data: { id: '999' } });
   expect(mockSendNotification).not.toHaveBeenCalled();
+});
+
+test('handlePaymentWebhook ignora quando paymentId salvo não confere', async () => {
+  mockGetState.mockResolvedValue({ flow: 'payment', step: 2, data: { paymentId: 111 } });
+  mockPaymentGet.mockResolvedValue({ id: 999, status: 'approved', external_reference: '5511999999999' });
+  await handlePaymentWebhook({ type: 'payment', data: { id: '999' } });
+  expect(mockSendNotification).not.toHaveBeenCalled();
+  expect(mockClearState).not.toHaveBeenCalled();
+});
+
+test('extractPaymentIdFromNotification prioriza query param data.id', () => {
+  expect(
+    extractPaymentIdFromNotification({ data: { id: '123' } }, { 'data.id': '999' })
+  ).toBe('999');
+});
+
+test('verifyWebhookSignature retorna true para assinatura válida', () => {
+  const signature = 'ts=1710000000,v1=b7077a9714c0438dc7bb97721d1b98b88c7cbbafbf14686a50d84e0ee1edff6e';
+  expect(
+    verifyWebhookSignature({
+      secret: 'test-secret',
+      signatureHeader: signature,
+      requestId: 'req-123',
+      dataId: '999',
+    })
+  ).toBe(true);
+});
+
+test('verifyWebhookSignature retorna false para assinatura inválida', () => {
+  expect(
+    verifyWebhookSignature({
+      secret: 'test-secret',
+      signatureHeader: 'ts=1710000000,v1=invalid',
+      requestId: 'req-123',
+      dataId: '999',
+    })
+  ).toBe(false);
 });
 
 test('handlePaymentFlow "cancelar" limpa estado', async () => {

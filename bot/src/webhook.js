@@ -10,9 +10,10 @@ const { handlePaymentFlow } = require('./payment');
 const { transcribeAudio } = require('./audio');
 const { handleImageMessage } = require('./image');
 const { sendBroadcast, loadContacts } = require('./broadcast');
+const { upsertLead, addInteraction } = require('./crm');
 
 function isPrivateChat(remoteJid) {
-  return remoteJid.endsWith('@s.whatsapp.net');
+  return typeof remoteJid === 'string' && remoteJid.endsWith('@s.whatsapp.net');
 }
 
 function extractMessage(data) {
@@ -96,6 +97,9 @@ async function processMessage(phone, text) {
     const parts = reply.split(':');
     const amount = parseFloat(parts[1]);
     const description = parts.slice(2).join(':');
+    if (!Number.isFinite(amount) || amount <= 0 || !description.trim()) {
+      return 'Desculpe, não consegui identificar o valor do pagamento. Informe o valor e a descrição novamente.';
+    }
     const newState = { flow: 'payment', step: 0, data: { amount, description } };
     await setState(phone, newState);
     await handlePaymentFlow(phone, newState, text);
@@ -132,6 +136,9 @@ async function handleWebhook(req, res) {
   if (!text && !hasAudio && !hasImage) return res.sendStatus(200);
 
   const phone = data.key.remoteJid.replace('@s.whatsapp.net', '');
+  const messageType = hasImage ? 'image' : hasAudio ? 'audio' : 'text';
+  const incomingContent = text || (hasAudio ? '[áudio]' : '[imagem]');
+  const pushName = data.pushName || null;
 
   if (await isHumanMode(phone)) return res.sendStatus(200);
 
@@ -139,7 +146,10 @@ async function handleWebhook(req, res) {
     res.sendStatus(200);
     (async () => {
       try {
+        await upsertLead(phone, pushName, incomingContent, messageType);
+        await addInteraction(phone, incomingContent, 'in', messageType);
         await sendText(phone, getClosedMessage());
+        await addInteraction(phone, getClosedMessage(), 'out', 'text');
       } catch (err) {
         console.error('Erro ao responder fora do horário:', err.message);
       }
@@ -151,6 +161,9 @@ async function handleWebhook(req, res) {
 
   (async () => {
     try {
+      await upsertLead(phone, pushName, incomingContent, messageType);
+      await addInteraction(phone, incomingContent, 'in', messageType);
+
       if (hasImage) {
         await handleImageMessage(phone, data);
         return;
@@ -163,7 +176,10 @@ async function handleWebhook(req, res) {
       }
 
       const reply = await processMessage(phone, messageText);
-      if (reply) await sendText(phone, reply);
+      if (reply) {
+        await sendText(phone, reply);
+        await addInteraction(phone, reply, 'out', 'text');
+      }
     } catch (err) {
       console.error('Erro ao processar mensagem:', err.message);
     }

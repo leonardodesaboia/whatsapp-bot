@@ -29,6 +29,7 @@ test('upsertLead consulta primeira etapa e faz upsert do lead', async () => {
     expect.stringContaining('INSERT INTO leads'),
     ['5511999999999', 'João', 'Olá', 1]
   );
+  expect(mockQuery.mock.calls[1][0]).toContain('stage_id = COALESCE(leads.stage_id, EXCLUDED.stage_id)');
 });
 
 test('upsertLead usa stage_id null quando não há etapas', async () => {

@@ -37,7 +37,7 @@ function formatTime(date) {
 async function getAvailableSlots(date, durationMinutes) {
   const fs = require('fs');
   const path = require('path');
-  const company = JSON.parse(fs.readFileSync(path.join(__dirname, '../../company.json'), 'utf8'));
+    const company = JSON.parse(fs.readFileSync(path.join(__dirname, '../company.json'), 'utf8'));
   const { timezone, schedule } = company.businessHours;
 
   const localDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));

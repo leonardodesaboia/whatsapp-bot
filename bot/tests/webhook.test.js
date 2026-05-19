@@ -30,6 +30,10 @@ jest.mock('../src/broadcast', () => ({
   sendBroadcast: jest.fn(),
   loadContacts: jest.fn(),
 }));
+jest.mock('../src/crm', () => ({
+  upsertLead: jest.fn(),
+  addInteraction: jest.fn(),
+}));
 
 const request = require('supertest');
 const express = require('express');
@@ -46,12 +50,14 @@ const { handlePaymentFlow } = require('../src/payment');
 const { transcribeAudio } = require('../src/audio');
 const { handleImageMessage } = require('../src/image');
 const { sendBroadcast, loadContacts } = require('../src/broadcast');
+const { upsertLead, addInteraction } = require('../src/crm');
 
 process.env.WEBHOOK_TOKEN = 'test-token';
 
 const app = express();
 app.use(express.json());
 app.post('/webhook', handleWebhook);
+app.post('/webhook/:event', handleWebhook);
 
 const validPayload = {
   event: 'messages.upsert',
@@ -72,6 +78,8 @@ beforeEach(() => {
   handleImageMessage.mockResolvedValue(undefined);
   sendBroadcast.mockResolvedValue({ sent: 2, failed: 0 });
   loadContacts.mockReturnValue([{ phone: '5511111111111' }, { phone: '5511222222222' }]);
+  upsertLead.mockResolvedValue(undefined);
+  addInteraction.mockResolvedValue(undefined);
 });
 
 test('retorna 401 sem token válido', async () => {
@@ -90,6 +98,28 @@ test('ignora mensagens de grupos', async () => {
 
 test('ignora eventos que não são messages.upsert', async () => {
   const payload = { ...validPayload, event: 'connection.update' };
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
+  expect(chat).not.toHaveBeenCalled();
+});
+
+test('aceita webhook com sufixo de evento da Evolution API', async () => {
+  getHistory.mockResolvedValue([]);
+  chat.mockResolvedValue('Olá!');
+  appendHistory.mockResolvedValue(undefined);
+  sendText.mockResolvedValue(undefined);
+
+  await request(app).post('/webhook/messages-upsert').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+
+  expect(chat).toHaveBeenCalledWith([], 'Qual o horário de atendimento?');
+  expect(sendText).toHaveBeenCalledWith('5511999999999', 'Olá!');
+});
+
+test('ignora payload com key sem remoteJid', async () => {
+  const payload = {
+    ...validPayload,
+    data: { ...validPayload.data, key: { fromMe: false, id: 'msg-123' } },
+  };
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
   expect(chat).not.toHaveBeenCalled();
 });
@@ -129,7 +159,20 @@ test('responde com closedMessage quando fora do horário', async () => {
   sendText.mockResolvedValue(undefined);
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
   await new Promise((r) => setTimeout(r, 100));
+  expect(upsertLead).toHaveBeenCalledWith(
+    '5511999999999',
+    null,
+    'Qual o horário de atendimento?',
+    'text'
+  );
+  expect(addInteraction).toHaveBeenCalledWith(
+    '5511999999999',
+    'Qual o horário de atendimento?',
+    'in',
+    'text'
+  );
   expect(sendText).toHaveBeenCalledWith('5511999999999', 'Estamos fechados!');
+  expect(addInteraction).toHaveBeenCalledWith('5511999999999', 'Estamos fechados!', 'out', 'text');
   expect(chat).not.toHaveBeenCalled();
 });
 
@@ -150,6 +193,51 @@ test('processa mensagem válida com OpenAI e envia resposta', async () => {
   await new Promise((r) => setTimeout(r, 100));
   expect(chat).toHaveBeenCalledWith([], 'Qual o horário de atendimento?');
   expect(sendText).toHaveBeenCalledWith('5511999999999', 'Atendemos das 9h às 18h.');
+});
+
+test('chama upsertLead e addInteraction (in/out) quando mensagem de texto chega', async () => {
+  getHistory.mockResolvedValue([]);
+  chat.mockResolvedValue('Olá!');
+  appendHistory.mockResolvedValue(undefined);
+  sendText.mockResolvedValue(undefined);
+
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+
+  expect(upsertLead).toHaveBeenCalledWith(
+    '5511999999999',
+    null,
+    'Qual o horário de atendimento?',
+    'text'
+  );
+  expect(addInteraction).toHaveBeenCalledWith(
+    '5511999999999',
+    'Qual o horário de atendimento?',
+    'in',
+    'text'
+  );
+  expect(addInteraction).toHaveBeenCalledWith('5511999999999', 'Olá!', 'out', 'text');
+});
+
+test('chama upsertLead com pushName quando disponível', async () => {
+  const payloadWithName = {
+    ...validPayload,
+    data: { ...validPayload.data, pushName: 'João Silva' },
+  };
+  getHistory.mockResolvedValue([]);
+  chat.mockResolvedValue('Olá!');
+  appendHistory.mockResolvedValue(undefined);
+  sendText.mockResolvedValue(undefined);
+
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(payloadWithName).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+
+  expect(upsertLead).toHaveBeenCalledWith(
+    '5511999999999',
+    'João Silva',
+    'Qual o horário de atendimento?',
+    'text'
+  );
 });
 
 test('detecta __TRANSFER__ e ativa modo humano', async () => {
@@ -234,6 +322,20 @@ test('detecta __PAYMENT__ e inicia flow de pagamento', async () => {
   expect(handlePaymentFlow).toHaveBeenCalled();
 });
 
+test('trata __PAYMENT__ inválido sem quebrar o fluxo', async () => {
+  getHistory.mockResolvedValue([]);
+  chat.mockResolvedValue('__PAYMENT__:abc:');
+  appendHistory.mockResolvedValue(undefined);
+  sendText.mockResolvedValue(undefined);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(handlePaymentFlow).not.toHaveBeenCalled();
+  expect(sendText).toHaveBeenCalledWith(
+    '5511999999999',
+    expect.stringContaining('não consegui identificar o valor do pagamento')
+  );
+});
+
 test('transcreve áudio e processa como texto normal', async () => {
   const audioPayload = {
     event: 'messages.upsert',
@@ -250,6 +352,8 @@ test('transcreve áudio e processa como texto normal', async () => {
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(audioPayload).expect(200);
   await new Promise((r) => setTimeout(r, 100));
   expect(transcribeAudio).toHaveBeenCalledWith(audioPayload.data);
+  expect(upsertLead).toHaveBeenCalledWith('5511999999999', null, '[áudio]', 'audio');
+  expect(addInteraction).toHaveBeenCalledWith('5511999999999', '[áudio]', 'in', 'audio');
   expect(chat).toHaveBeenCalledWith([], 'quero agendar um horário');
   expect(sendText).toHaveBeenCalledWith('5511999999999', 'Claro! Vamos agendar.');
 });
