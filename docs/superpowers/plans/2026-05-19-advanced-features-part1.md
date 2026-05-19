@@ -1,12 +1,12 @@
-# Advanced Features Implementation Plan
+# Advanced Features — Parte 1: Core + Catálogo + Notificações
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Adicionar 6 funcionalidades universais ao bot (horário, transferência humana, catálogo, notificações, agendamento Google Calendar, Pix Mercado Pago).
+**Goal:** Adicionar estado de conversa, horário de atendimento, transferência para humano, catálogo interativo e notificações proativas ao bot existente — sem dependências externas novas.
 
-**Architecture:** Estado de conversa por telefone no Redis (`state:{phone}`) com `{mode, flow, step, data}`. O `webhook.js` verifica estado no início de cada mensagem e roteia para o handler do flow ativo. Flows multi-step (catalog, scheduling, payment) gerenciam seus próprios steps e chamam a Evolution API diretamente.
+**Architecture:** Estado por telefone no Redis (`state:{phone}`) com `{mode, flow, step, data}`. O `webhook.js` verifica estado antes de processar, roteando para flow handlers quando ativo. OpenAI retorna tokens especiais (`__TRANSFER__`, `__CATALOG__`) para acionar transições de estado.
 
-**Tech Stack:** Node.js 20, Express, redis v4, googleapis, mercadopago, axios, Jest, Evolution API v2.
+**Tech Stack:** Node.js 20, Express, redis v4, axios, Jest — sem novas dependências npm.
 
 ---
 
@@ -16,42 +16,38 @@
 - `catalog.json` — catálogo de produtos/serviços (raiz)
 - `bot/src/state.js` — estado de conversa por telefone
 - `bot/src/businessHours.js` — verificação de horário de atendimento
-- `bot/src/notify.js` — envio de notificações proativas
-- `bot/src/catalog.js` — carrega catálogo, handlers de flow
-- `bot/src/scheduling.js` — Google Calendar + flow de agendamento
-- `bot/src/payment.js` — Mercado Pago Pix + flow de pagamento
+- `bot/src/notify.js` — notificações proativas
+- `bot/src/catalog.js` — catálogo interativo com list messages
 - `bot/tests/state.test.js`
 - `bot/tests/businessHours.test.js`
 - `bot/tests/notify.test.js`
 - `bot/tests/catalog.test.js`
-- `bot/tests/scheduling.test.js`
-- `bot/tests/payment.test.js`
 
 **Modificar:**
 - `company.json` — adicionar campo `businessHours`
 - `bot/src/redis.js` — exportar `getClient`
-- `bot/src/evolutionApi.js` — adicionar `sendList`, `sendImageBase64`
-- `bot/src/webhook.js` — refatorar com nova lógica de roteamento
-- `bot/src/index.js` — novas rotas + reagendamento de lembretes
-- `bot/tests/webhook.test.js` — novos casos de teste
-- `bot/package.json` — novas dependências
-- `.env.example` — novas variáveis
+- `bot/src/evolutionApi.js` — adicionar `sendList`
+- `bot/src/webhook.js` — refatorar com roteamento de estado
+- `bot/src/openai.js` — adicionar tokens de intenção ao system prompt
+- `bot/src/index.js` — adicionar rota `POST /notify`
+- `bot/tests/webhook.test.js` — atualizar com novos casos
+- `bot/tests/evolutionApi.test.js` — adicionar teste de `sendList`
+- `.env.example` — nova variável
+- `.gitignore` — ignorar `google-credentials.json` (usado na Parte 2)
 - `docker-compose.yml` — montar `catalog.json`
 
 ---
 
-## Task 1: Scaffold — config files e dependências
+## Task 1: Scaffold — arquivos de configuração
 
 **Files:**
 - Modify: `company.json`
 - Create: `catalog.json`
 - Modify: `.env.example`
+- Modify: `.gitignore`
 - Modify: `docker-compose.yml`
-- Modify: `bot/package.json`
 
 - [ ] **Step 1: Adicionar `businessHours` ao `company.json`**
-
-Substituir o conteúdo de `company.json`:
 
 ```json
 {
@@ -135,60 +131,37 @@ Substituir o conteúdo de `company.json`:
 }
 ```
 
-- [ ] **Step 3: Atualizar `.env.example`**
-
-Adicionar ao final do arquivo existente:
+- [ ] **Step 3: Adicionar ao final de `.env.example`**
 
 ```bash
 # Transferência para humano
 HUMAN_TAKEOVER_TIMEOUT_MINUTES=30
-
-# Google Calendar (agendamento)
-GOOGLE_CALENDAR_ID=seu-calendario@group.calendar.google.com
-GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
-
-# Mercado Pago (Pix)
-MERCADOPAGO_ACCESS_TOKEN=APP_USR-...
-MERCADOPAGO_WEBHOOK_SECRET=seu-webhook-secret
 ```
 
-- [ ] **Step 4: Atualizar `docker-compose.yml` — montar `catalog.json` e `google-credentials.json`**
-
-No serviço `bot`, adicionar ao array `volumes`:
-
-```yaml
-      - ./catalog.json:/app/catalog.json:ro
-      - ./google-credentials.json:/app/google-credentials.json:ro
-```
-
-- [ ] **Step 5: Instalar dependências**
-
-```bash
-cd bot
-npm install googleapis mercadopago
-```
-
-Saída esperada: `added N packages` sem erros.
-
-- [ ] **Step 6: Adicionar `google-credentials.json` ao `.gitignore`**
-
-Adicionar ao final do `.gitignore` existente:
+- [ ] **Step 4: Adicionar ao final de `.gitignore`**
 
 ```
 google-credentials.json
 ```
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Adicionar volume `catalog.json` ao serviço `bot` em `docker-compose.yml`**
+
+No array `volumes` do serviço `bot`, adicionar:
+
+```yaml
+      - ./catalog.json:/app/catalog.json:ro
+```
+
+- [ ] **Step 6: Commit**
 
 ```bash
-cd ..
-git add company.json catalog.json .env.example docker-compose.yml bot/package.json bot/package-lock.json .gitignore
-git commit -m "chore: scaffold advanced features config and dependencies"
+git add company.json catalog.json .env.example .gitignore docker-compose.yml
+git commit -m "chore: scaffold part1 config files"
 ```
 
 ---
 
-## Task 2: Expor `getClient` do redis.js + adicionar métodos à evolutionApi.js
+## Task 2: Expor `getClient` + adicionar `sendList` à `evolutionApi`
 
 **Files:**
 - Modify: `bot/src/redis.js`
@@ -197,15 +170,15 @@ git commit -m "chore: scaffold advanced features config and dependencies"
 
 - [ ] **Step 1: Exportar `getClient` de `bot/src/redis.js`**
 
-Alterar a última linha de `bot/src/redis.js`:
+Alterar a última linha:
 
 ```javascript
 module.exports = { getHistory, appendHistory, getClient };
 ```
 
-- [ ] **Step 2: Adicionar `sendList` e `sendImageBase64` ao `bot/src/evolutionApi.js`**
+- [ ] **Step 2: Adicionar `sendList` ao `bot/src/evolutionApi.js`**
 
-Adicionar após a função `registerWebhook`:
+Adicionar após `registerWebhook`:
 
 ```javascript
 async function sendList(to, listMessage) {
@@ -215,34 +188,26 @@ async function sendList(to, listMessage) {
     { headers: { apikey: API_KEY } }
   );
 }
-
-async function sendImageBase64(to, base64, caption) {
-  await axios.post(
-    `${BASE_URL}/message/sendMedia/${INSTANCE}`,
-    {
-      number: to,
-      mediatype: 'image',
-      mimetype: 'image/png',
-      media: base64,
-      caption: caption || '',
-    },
-    { headers: { apikey: API_KEY } }
-  );
-}
 ```
 
-Atualizar o `module.exports`:
+Atualizar `module.exports`:
 
 ```javascript
-module.exports = { sendText, registerWebhook, sendList, sendImageBase64 };
+module.exports = { sendText, registerWebhook, sendList };
 ```
 
-- [ ] **Step 3: Adicionar testes para `sendList` e `sendImageBase64` em `bot/tests/evolutionApi.test.js`**
+- [ ] **Step 3: Adicionar teste de `sendList` em `bot/tests/evolutionApi.test.js`**
 
-Adicionar `mockPost` já está presente. Adicionar ao final do arquivo:
+Atualizar o `require` no topo:
 
 ```javascript
-test('sendList envia POST para o endpoint correto com listMessage', async () => {
+const { sendText, registerWebhook, sendList } = require('../src/evolutionApi');
+```
+
+Adicionar ao final do arquivo:
+
+```javascript
+test('sendList envia POST para o endpoint correto', async () => {
   mockPost.mockResolvedValue({ data: {} });
   const listMessage = { title: 'Categorias', buttonText: 'Ver', sections: [] };
   await sendList('5511999999999', listMessage);
@@ -252,28 +217,6 @@ test('sendList envia POST para o endpoint correto com listMessage', async () => 
     { headers: { apikey: 'test-api-key' } }
   );
 });
-
-test('sendImageBase64 envia POST com base64 e caption', async () => {
-  mockPost.mockResolvedValue({ data: {} });
-  await sendImageBase64('5511999999999', 'abc123', 'QR Code');
-  expect(mockPost).toHaveBeenCalledWith(
-    'http://evolution:8080/message/sendMedia/test-instance',
-    {
-      number: '5511999999999',
-      mediatype: 'image',
-      mimetype: 'image/png',
-      media: 'abc123',
-      caption: 'QR Code',
-    },
-    { headers: { apikey: 'test-api-key' } }
-  );
-});
-```
-
-Adicionar `sendList` e `sendImageBase64` no require do topo do test file:
-
-```javascript
-const { sendText, registerWebhook, sendList, sendImageBase64 } = require('../src/evolutionApi');
 ```
 
 - [ ] **Step 4: Rodar testes**
@@ -282,14 +225,14 @@ const { sendText, registerWebhook, sendList, sendImageBase64 } = require('../src
 cd bot && npx jest tests/evolutionApi.test.js --no-coverage
 ```
 
-Saída esperada: `PASS tests/evolutionApi.test.js` — 4 testes passando.
+Saída esperada: `PASS tests/evolutionApi.test.js` — 3 testes passando.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 cd ..
 git add bot/src/redis.js bot/src/evolutionApi.js bot/tests/evolutionApi.test.js
-git commit -m "feat: export getClient from redis and add sendList/sendImageBase64 to evolutionApi"
+git commit -m "feat: export getClient and add sendList to evolutionApi"
 ```
 
 ---
@@ -336,7 +279,7 @@ test('getState retorna estado parseado do Redis', async () => {
   expect(state).toEqual(saved);
 });
 
-test('setState merge estado parcial com estado existente', async () => {
+test('setState faz merge do estado parcial com estado existente', async () => {
   const existing = { mode: 'bot', flow: 'catalog', step: 1, data: { categoryId: 'services' } };
   mockGet.mockResolvedValue(JSON.stringify(existing));
   mockSet.mockResolvedValue('OK');
@@ -352,8 +295,7 @@ test('setState aceita TTL customizado', async () => {
   mockGet.mockResolvedValue(null);
   mockSet.mockResolvedValue('OK');
   await setState('5511999999999', { mode: 'human' }, 1800);
-  const call = mockSet.mock.calls[0];
-  expect(call[2]).toEqual({ EX: 1800 });
+  expect(mockSet.mock.calls[0][2]).toEqual({ EX: 1800 });
 });
 
 test('clearState deleta a chave do Redis', async () => {
@@ -366,11 +308,10 @@ test('setHumanMode define mode=human com TTL de 30 minutos', async () => {
   mockGet.mockResolvedValue(null);
   mockSet.mockResolvedValue('OK');
   await setHumanMode('5511999999999');
-  const call = mockSet.mock.calls[0];
-  const saved = JSON.parse(call[1]);
+  const saved = JSON.parse(mockSet.mock.calls[0][1]);
   expect(saved.mode).toBe('human');
   expect(saved.flow).toBeNull();
-  expect(call[2]).toEqual({ EX: 1800 }); // 30 * 60
+  expect(mockSet.mock.calls[0][2]).toEqual({ EX: 1800 });
 });
 
 test('isHumanMode retorna true quando mode é human', async () => {
@@ -462,7 +403,6 @@ Criar `bot/tests/businessHours.test.js`:
 jest.mock('fs', () => ({
   readFileSync: jest.fn(() =>
     JSON.stringify({
-      nome: 'Empresa Teste',
       businessHours: {
         timezone: 'America/Sao_Paulo',
         schedule: {
@@ -486,28 +426,15 @@ test('getClosedMessage retorna a mensagem configurada', () => {
   expect(getClosedMessage()).toBe('Estamos fechados!');
 });
 
-test('isOpen retorna false para dia sem horário (sábado)', () => {
-  // Sábado = 6
-  const saturday = new Date('2026-05-16T14:00:00.000Z'); // Sábado UTC
-  jest.spyOn(global, 'Date').mockImplementation((arg) => {
-    if (arg) return new OriginalDate(arg);
-    return new OriginalDate(saturday);
-  });
-  // Note: Este teste depende do timezone, veja implementação
-  expect(typeof isOpen()).toBe('boolean');
-  global.Date = OriginalDate;
-});
-
 test('isOpen retorna boolean', () => {
   expect(typeof isOpen()).toBe('boolean');
 });
 
 test('getClosedMessage é uma string não vazia', () => {
-  expect(typeof getClosedMessage()).toBe('string');
-  expect(getClosedMessage().length).toBeGreaterThan(0);
+  const msg = getClosedMessage();
+  expect(typeof msg).toBe('string');
+  expect(msg.length).toBeGreaterThan(0);
 });
-
-const OriginalDate = Date;
 ```
 
 - [ ] **Step 2: Rodar para confirmar falha**
@@ -555,7 +482,7 @@ module.exports = { isOpen, getClosedMessage };
 npx jest tests/businessHours.test.js --no-coverage
 ```
 
-Saída esperada: `PASS tests/businessHours.test.js` — 4 testes passando.
+Saída esperada: `PASS tests/businessHours.test.js` — 3 testes passando.
 
 - [ ] **Step 5: Commit**
 
@@ -584,7 +511,6 @@ jest.mock('../src/evolutionApi', () => ({
   sendText: mockSendText,
   registerWebhook: jest.fn(),
   sendList: jest.fn(),
-  sendImageBase64: jest.fn(),
 }));
 
 const { sendNotification } = require('../src/notify');
@@ -663,19 +589,17 @@ Criar `bot/tests/catalog.test.js`:
 ```javascript
 const mockSendText = jest.fn();
 const mockSendList = jest.fn();
-const mockGetState = jest.fn();
 const mockSetState = jest.fn();
 const mockClearState = jest.fn();
 
 jest.mock('../src/evolutionApi', () => ({
   sendText: mockSendText,
   sendList: mockSendList,
-  sendImageBase64: jest.fn(),
   registerWebhook: jest.fn(),
 }));
 
 jest.mock('../src/state', () => ({
-  getState: mockGetState,
+  getState: jest.fn(),
   setState: mockSetState,
   clearState: mockClearState,
   setHumanMode: jest.fn(),
@@ -710,9 +634,8 @@ const {
 beforeEach(() => jest.clearAllMocks());
 
 test('getCategories retorna todas as categorias', () => {
-  const cats = getCategories();
-  expect(cats).toHaveLength(1);
-  expect(cats[0].id).toBe('services');
+  expect(getCategories()).toHaveLength(1);
+  expect(getCategories()[0].id).toBe('services');
 });
 
 test('getCategory retorna categoria por id', () => {
@@ -917,7 +840,7 @@ module.exports = {
 npx jest tests/catalog.test.js --no-coverage
 ```
 
-Saída esperada: `PASS tests/catalog.test.js` — 11 testes passando.
+Saída esperada: `PASS tests/catalog.test.js` — 10 testes passando.
 
 - [ ] **Step 5: Commit**
 
@@ -929,676 +852,7 @@ git commit -m "feat: add catalog module with interactive list messages"
 
 ---
 
-## Task 7: `scheduling.js` — agendamento com Google Calendar (TDD)
-
-**Files:**
-- Create: `bot/src/scheduling.js`
-- Create: `bot/tests/scheduling.test.js`
-
-- [ ] **Step 1: Escrever o teste com falha**
-
-Criar `bot/tests/scheduling.test.js`:
-
-```javascript
-const mockEventsList = jest.fn();
-const mockEventsInsert = jest.fn();
-const mockEventsDelete = jest.fn();
-const mockSendText = jest.fn();
-const mockSendNotification = jest.fn();
-const mockGetState = jest.fn();
-const mockSetState = jest.fn();
-const mockClearState = jest.fn();
-const mockGetClient = jest.fn();
-const mockRedisSet = jest.fn();
-const mockRedisDel = jest.fn();
-const mockRedisKeys = jest.fn();
-const mockRedisTtl = jest.fn();
-
-const mockRedisClient = {
-  set: mockRedisSet,
-  del: mockRedisDel,
-  keys: mockRedisKeys,
-  ttl: mockRedisTtl,
-};
-
-jest.mock('googleapis', () => ({
-  google: {
-    auth: {
-      GoogleAuth: jest.fn().mockImplementation(() => ({
-        getClient: jest.fn().mockResolvedValue({}),
-      })),
-    },
-    calendar: jest.fn().mockReturnValue({
-      events: {
-        list: mockEventsList,
-        insert: mockEventsInsert,
-        delete: mockEventsDelete,
-      },
-    }),
-  },
-}));
-
-jest.mock('../src/evolutionApi', () => ({
-  sendText: mockSendText,
-  sendList: jest.fn(),
-  sendImageBase64: jest.fn(),
-  registerWebhook: jest.fn(),
-}));
-
-jest.mock('../src/notify', () => ({ sendNotification: mockSendNotification }));
-
-jest.mock('../src/state', () => ({
-  getState: mockGetState,
-  setState: mockSetState,
-  clearState: mockClearState,
-  setHumanMode: jest.fn(),
-  isHumanMode: jest.fn(),
-}));
-
-jest.mock('../src/redis', () => ({
-  getClient: mockGetClient.mockResolvedValue(mockRedisClient),
-  getHistory: jest.fn(),
-  appendHistory: jest.fn(),
-}));
-
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(() =>
-    JSON.stringify({
-      businessHours: {
-        timezone: 'America/Sao_Paulo',
-        schedule: {
-          mon: { open: '09:00', close: '18:00' },
-          tue: { open: '09:00', close: '18:00' },
-          wed: { open: '09:00', close: '18:00' },
-          thu: { open: '09:00', close: '18:00' },
-          fri: { open: '09:00', close: '18:00' },
-          sat: null,
-          sun: null,
-        },
-      },
-    })
-  ),
-}));
-
-process.env.GOOGLE_CALENDAR_ID = 'test@calendar.google.com';
-process.env.GOOGLE_APPLICATION_CREDENTIALS = '/fake/credentials.json';
-
-const { createAppointment, cancelAppointment, handleSchedulingFlow } = require('../src/scheduling');
-
-beforeEach(() => jest.clearAllMocks());
-
-test('createAppointment insere evento no Google Calendar e retorna eventId', async () => {
-  mockEventsInsert.mockResolvedValue({ data: { id: 'evt-123' } });
-  mockRedisSet.mockResolvedValue('OK');
-  const id = await createAppointment('5511999999999', 'Corte', new Date('2026-06-01T10:00:00'), 60);
-  expect(mockEventsInsert).toHaveBeenCalled();
-  expect(id).toBe('evt-123');
-});
-
-test('cancelAppointment deleta evento do Google Calendar', async () => {
-  mockEventsDelete.mockResolvedValue({});
-  await cancelAppointment('evt-123');
-  expect(mockEventsDelete).toHaveBeenCalledWith(
-    expect.objectContaining({ calendarId: 'test@calendar.google.com', eventId: 'evt-123' })
-  );
-});
-
-test('handleSchedulingFlow step 0 sem service pede descrição do serviço', async () => {
-  mockSetState.mockResolvedValue(undefined);
-  mockSendText.mockResolvedValue(undefined);
-  await handleSchedulingFlow('5511999999999', { flow: 'scheduling', step: 0, data: {} }, 'quero agendar');
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('serviço'));
-  expect(mockSetState).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ step: 1 }));
-});
-
-test('handleSchedulingFlow step 1 salva serviço e mostra slots', async () => {
-  mockSetState.mockResolvedValue(undefined);
-  mockSendText.mockResolvedValue(undefined);
-  mockEventsList.mockResolvedValue({ data: { items: [] } });
-  await handleSchedulingFlow('5511999999999', { flow: 'scheduling', step: 1, data: {} }, 'Corte de cabelo');
-  expect(mockSetState).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ step: 2 }));
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('horário'));
-});
-
-test('handleSchedulingFlow step 3 confirma com "sim" cria agendamento', async () => {
-  mockSetState.mockResolvedValue(undefined);
-  mockClearState.mockResolvedValue(undefined);
-  mockSendText.mockResolvedValue(undefined);
-  mockEventsInsert.mockResolvedValue({ data: { id: 'evt-456' } });
-  mockRedisSet.mockResolvedValue('OK');
-  mockSendNotification.mockResolvedValue(undefined);
-
-  const slotDate = new Date('2026-06-01T10:00:00');
-  await handleSchedulingFlow(
-    '5511999999999',
-    { flow: 'scheduling', step: 3, data: { service: 'Corte', slot: slotDate, duration: 60, slots: [slotDate] } },
-    'sim'
-  );
-  expect(mockEventsInsert).toHaveBeenCalled();
-  expect(mockClearState).toHaveBeenCalledWith('5511999999999');
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('confirmado'));
-});
-
-test('handleSchedulingFlow "cancelar" limpa estado', async () => {
-  mockClearState.mockResolvedValue(undefined);
-  mockSendText.mockResolvedValue(undefined);
-  await handleSchedulingFlow('5511999999999', { flow: 'scheduling', step: 2, data: {} }, 'cancelar');
-  expect(mockClearState).toHaveBeenCalledWith('5511999999999');
-});
-```
-
-- [ ] **Step 2: Rodar para confirmar falha**
-
-```bash
-cd bot && npx jest tests/scheduling.test.js --no-coverage
-```
-
-Saída esperada: `Cannot find module '../src/scheduling'`
-
-- [ ] **Step 3: Implementar `bot/src/scheduling.js`**
-
-```javascript
-const { google } = require('googleapis');
-const { sendText } = require('./evolutionApi');
-const { sendNotification } = require('./notify');
-const { setState, clearState } = require('./state');
-const { getClient } = require('./redis');
-
-const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
-const DAY_MAP = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-
-async function getAuth() {
-  const auth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    scopes: ['https://www.googleapis.com/auth/calendar'],
-  });
-  return auth.getClient();
-}
-
-function formatSlot(date) {
-  return new Date(date).toLocaleString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatTime(date) {
-  return new Date(date).toLocaleTimeString('pt-BR', {
-    timeZone: 'America/Sao_Paulo',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-async function getAvailableSlots(date, durationMinutes) {
-  const fs = require('fs');
-  const path = require('path');
-  const company = JSON.parse(fs.readFileSync(path.join(__dirname, '../../company.json'), 'utf8'));
-  const { timezone, schedule } = company.businessHours;
-
-  const localDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
-  const dayKey = DAY_MAP[localDate.getDay()];
-  const daySchedule = schedule[dayKey];
-  if (!daySchedule) return [];
-
-  const auth = await getAuth();
-  const cal = google.calendar('v3');
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-
-  const response = await cal.events.list({
-    auth,
-    calendarId: CALENDAR_ID,
-    timeMin: startOfDay.toISOString(),
-    timeMax: endOfDay.toISOString(),
-    singleEvents: true,
-    orderBy: 'startTime',
-  });
-
-  const busyTimes = (response.data.items || []).map((e) => ({
-    start: new Date(e.start.dateTime),
-    end: new Date(e.end.dateTime),
-  }));
-
-  const slots = [];
-  const [openH, openM] = daySchedule.open.split(':').map(Number);
-  const [closeH, closeM] = daySchedule.close.split(':').map(Number);
-
-  const slotStart = new Date(date);
-  slotStart.setHours(openH, openM, 0, 0);
-  const dayEnd = new Date(date);
-  dayEnd.setHours(closeH, closeM, 0, 0);
-
-  while (slotStart < dayEnd && slots.length < 5) {
-    const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60000);
-    if (slotEnd > dayEnd) break;
-    const conflict = busyTimes.some((b) => slotStart < b.end && slotEnd > b.start);
-    if (!conflict && slotStart > new Date()) {
-      slots.push(new Date(slotStart));
-    }
-    slotStart.setMinutes(slotStart.getMinutes() + durationMinutes);
-  }
-
-  return slots;
-}
-
-async function createAppointment(phone, service, datetime, durationMinutes) {
-  const auth = await getAuth();
-  const cal = google.calendar('v3');
-  const end = new Date(new Date(datetime).getTime() + durationMinutes * 60000);
-  const response = await cal.events.insert({
-    auth,
-    calendarId: CALENDAR_ID,
-    requestBody: {
-      summary: service,
-      description: `WhatsApp: ${phone}`,
-      start: { dateTime: new Date(datetime).toISOString() },
-      end: { dateTime: end.toISOString() },
-    },
-  });
-  return response.data.id;
-}
-
-async function cancelAppointment(eventId) {
-  const auth = await getAuth();
-  const cal = google.calendar('v3');
-  await cal.events.delete({ auth, calendarId: CALENDAR_ID, eventId });
-}
-
-async function scheduleReminders(phone, appointmentDate, eventId) {
-  const client = await getClient();
-  const dt = new Date(appointmentDate);
-
-  const d1 = new Date(dt);
-  d1.setDate(d1.getDate() - 1);
-  d1.setHours(9, 0, 0, 0);
-
-  const h2 = new Date(dt.getTime() - 2 * 60 * 60 * 1000);
-
-  const reminders = [
-    { key: `reminder:${phone}:${eventId}:d1`, fireAt: d1, message: `Lembrete: seu agendamento é amanhã às ${formatTime(dt)}.` },
-    { key: `reminder:${phone}:${eventId}:h2`, fireAt: h2, message: `Lembrete: seu agendamento é em 2 horas, às ${formatTime(dt)}.` },
-  ];
-
-  for (const { key, fireAt, message } of reminders) {
-    if (fireAt > new Date()) {
-      const ttl = Math.ceil((fireAt - Date.now()) / 1000) + 3600;
-      await client.set(key, JSON.stringify({ phone, message, fireAt: fireAt.toISOString() }), { EX: ttl });
-      const delay = Math.max(0, fireAt - Date.now());
-      setTimeout(async () => {
-        try {
-          await sendNotification(phone, message);
-          await client.del(key);
-        } catch (err) {
-          console.error('Erro ao enviar lembrete:', err.message);
-        }
-      }, delay);
-    }
-  }
-}
-
-async function rescheduleAllReminders() {
-  const client = await getClient();
-  const keys = await client.keys('reminder:*');
-  for (const key of keys) {
-    const raw = await client.get(key);
-    if (!raw) continue;
-    const { phone, message, fireAt } = JSON.parse(raw);
-    const delay = Math.max(0, new Date(fireAt) - Date.now());
-    setTimeout(async () => {
-      try {
-        await sendNotification(phone, message);
-        await client.del(key);
-      } catch (err) {
-        console.error('Erro ao enviar lembrete reagendado:', err.message);
-      }
-    }, delay);
-  }
-}
-
-async function showAvailableSlots(phone, state, durationMinutes) {
-  const slots = [];
-  const today = new Date();
-  for (let day = 0; day < 3 && slots.length < 5; day++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() + day);
-    const daySlots = await getAvailableSlots(date, durationMinutes || 60);
-    slots.push(...daySlots);
-  }
-  const available = slots.slice(0, 5);
-  if (available.length === 0) {
-    await clearState(phone);
-    await sendText(phone, 'Não há horários disponíveis nos próximos 3 dias. Entre em contato diretamente.');
-    return;
-  }
-  await setState(phone, { ...state, step: 2, data: { ...state.data, slots: available } });
-  const list = available.map((s, i) => `${i + 1}. ${formatSlot(s)}`).join('\n');
-  await sendText(phone, `Horários disponíveis:\n\n${list}\n\nDigite o número do horário desejado ou "cancelar".`);
-}
-
-async function handleSchedulingFlow(phone, state, text) {
-  if (text?.toLowerCase() === 'cancelar') {
-    await clearState(phone);
-    await sendText(phone, 'Agendamento cancelado. Como posso ajudar?');
-    return;
-  }
-
-  if (state.step === 0) {
-    if (state.data.service) {
-      await showAvailableSlots(phone, state, state.data.duration);
-      return;
-    }
-    await setState(phone, { flow: 'scheduling', step: 1, data: {} });
-    await sendText(phone, 'Qual serviço você deseja agendar?');
-    return;
-  }
-
-  if (state.step === 1) {
-    await setState(phone, { flow: 'scheduling', step: 2, data: { service: text } });
-    await showAvailableSlots(phone, { flow: 'scheduling', step: 2, data: { service: text } }, 60);
-    return;
-  }
-
-  if (state.step === 2) {
-    const idx = parseInt(text, 10) - 1;
-    const slot = state.data.slots?.[idx];
-    if (!slot) {
-      await sendText(phone, 'Opção inválida. Digite o número do horário ou "cancelar".');
-      return;
-    }
-    await setState(phone, { flow: 'scheduling', step: 3, data: { ...state.data, slot } });
-    await sendText(phone, `Confirmar agendamento?\n*${state.data.service}*\n📅 ${formatSlot(slot)}\n\nDigite "sim" para confirmar ou "cancelar".`);
-    return;
-  }
-
-  if (state.step === 3) {
-    if (text?.toLowerCase() !== 'sim') {
-      await clearState(phone);
-      await sendText(phone, 'Agendamento cancelado. Como posso ajudar?');
-      return;
-    }
-    const { service, slot, duration } = state.data;
-    const eventId = await createAppointment(phone, service, slot, duration || 60);
-    await scheduleReminders(phone, slot, eventId);
-    await clearState(phone);
-    await sendText(phone, `✅ Agendamento confirmado!\n*${service}*\n📅 ${formatSlot(slot)}\n\nAté lá! Você receberá lembretes.`);
-  }
-}
-
-module.exports = {
-  getAvailableSlots,
-  createAppointment,
-  cancelAppointment,
-  scheduleReminders,
-  rescheduleAllReminders,
-  handleSchedulingFlow,
-};
-```
-
-- [ ] **Step 4: Rodar para confirmar que passa**
-
-```bash
-npx jest tests/scheduling.test.js --no-coverage
-```
-
-Saída esperada: `PASS tests/scheduling.test.js` — 6 testes passando.
-
-- [ ] **Step 5: Commit**
-
-```bash
-cd ..
-git add bot/src/scheduling.js bot/tests/scheduling.test.js
-git commit -m "feat: add scheduling module with Google Calendar and reminders"
-```
-
----
-
-## Task 8: `payment.js` — Pix com Mercado Pago (TDD)
-
-**Files:**
-- Create: `bot/src/payment.js`
-- Create: `bot/tests/payment.test.js`
-
-- [ ] **Step 1: Escrever o teste com falha**
-
-Criar `bot/tests/payment.test.js`:
-
-```javascript
-const mockPaymentCreate = jest.fn();
-const mockSendText = jest.fn();
-const mockSendImageBase64 = jest.fn();
-const mockSendNotification = jest.fn();
-const mockSetState = jest.fn();
-const mockClearState = jest.fn();
-const mockGetState = jest.fn();
-
-jest.mock('mercadopago', () => ({
-  MercadoPagoConfig: jest.fn(),
-  Payment: jest.fn().mockImplementation(() => ({
-    create: mockPaymentCreate,
-  })),
-}));
-
-jest.mock('../src/evolutionApi', () => ({
-  sendText: mockSendText,
-  sendImageBase64: mockSendImageBase64,
-  sendList: jest.fn(),
-  registerWebhook: jest.fn(),
-}));
-
-jest.mock('../src/notify', () => ({ sendNotification: mockSendNotification }));
-
-jest.mock('../src/state', () => ({
-  setState: mockSetState,
-  clearState: mockClearState,
-  getState: mockGetState,
-  setHumanMode: jest.fn(),
-  isHumanMode: jest.fn(),
-}));
-
-process.env.MERCADOPAGO_ACCESS_TOKEN = 'test-token';
-process.env.MERCADOPAGO_WEBHOOK_SECRET = 'test-secret';
-
-const { createPixCharge, handlePaymentFlow, handlePaymentWebhook } = require('../src/payment');
-
-beforeEach(() => jest.clearAllMocks());
-
-test('createPixCharge cria cobrança no Mercado Pago e retorna dados do Pix', async () => {
-  mockPaymentCreate.mockResolvedValue({
-    id: 12345,
-    status: 'pending',
-    point_of_interaction: {
-      transaction_data: {
-        qr_code_base64: 'base64imgdata',
-        qr_code: '00020101...',
-      },
-    },
-  });
-  const result = await createPixCharge('5511999999999', 50.00, 'Serviço Básico');
-  expect(result).toEqual({
-    paymentId: 12345,
-    qrCodeBase64: 'base64imgdata',
-    qrCodeText: '00020101...',
-  });
-  expect(mockPaymentCreate).toHaveBeenCalledWith({
-    body: expect.objectContaining({
-      transaction_amount: 50.00,
-      description: 'Serviço Básico',
-      payment_method_id: 'pix',
-      external_reference: '5511999999999',
-    }),
-  });
-});
-
-test('handlePaymentFlow step 0 envia confirmação de valor', async () => {
-  mockSetState.mockResolvedValue(undefined);
-  mockSendText.mockResolvedValue(undefined);
-  await handlePaymentFlow('5511999999999', { flow: 'payment', step: 0, data: { amount: 50.00, description: 'Serviço Básico' } }, 'pagar');
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('R$ 50,00'));
-  expect(mockSetState).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ step: 1 }));
-});
-
-test('handlePaymentFlow step 1 com "sim" gera Pix e envia QR code', async () => {
-  mockSetState.mockResolvedValue(undefined);
-  mockSendText.mockResolvedValue(undefined);
-  mockSendImageBase64.mockResolvedValue(undefined);
-  mockPaymentCreate.mockResolvedValue({
-    id: 999,
-    status: 'pending',
-    point_of_interaction: {
-      transaction_data: { qr_code_base64: 'imgbase64', qr_code: 'pixcode123' },
-    },
-  });
-  await handlePaymentFlow(
-    '5511999999999',
-    { flow: 'payment', step: 1, data: { amount: 50.00, description: 'Serviço Básico' } },
-    'sim'
-  );
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('pixcode123'));
-  expect(mockSendImageBase64).toHaveBeenCalledWith('5511999999999', 'imgbase64', expect.any(String));
-  expect(mockSetState).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ step: 2 }));
-});
-
-test('handlePaymentFlow step 1 com "não" cancela flow', async () => {
-  mockClearState.mockResolvedValue(undefined);
-  mockSendText.mockResolvedValue(undefined);
-  await handlePaymentFlow('5511999999999', { flow: 'payment', step: 1, data: { amount: 50, description: 'X' } }, 'não');
-  expect(mockClearState).toHaveBeenCalledWith('5511999999999');
-});
-
-test('handlePaymentFlow step 2 mensagem durante espera retorna aviso', async () => {
-  mockSendText.mockResolvedValue(undefined);
-  await handlePaymentFlow('5511999999999', { flow: 'payment', step: 2, data: { paymentId: 999 } }, 'oi');
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('Aguardando'));
-});
-
-test('handlePaymentWebhook processa pagamento aprovado e notifica cliente', async () => {
-  mockGetState.mockResolvedValue({ flow: 'payment', step: 2, data: { paymentId: 999 } });
-  mockClearState.mockResolvedValue(undefined);
-  mockSendNotification.mockResolvedValue(undefined);
-  await handlePaymentWebhook({ action: 'payment.updated', data: { id: '999' }, external_reference: '5511999999999' }, 'approved');
-  expect(mockSendNotification).toHaveBeenCalledWith('5511999999999', expect.stringContaining('recebido'));
-  expect(mockClearState).toHaveBeenCalledWith('5511999999999');
-});
-
-test('handlePaymentFlow "cancelar" limpa estado', async () => {
-  mockClearState.mockResolvedValue(undefined);
-  mockSendText.mockResolvedValue(undefined);
-  await handlePaymentFlow('5511999999999', { flow: 'payment', step: 2, data: {} }, 'cancelar');
-  expect(mockClearState).toHaveBeenCalledWith('5511999999999');
-});
-```
-
-- [ ] **Step 2: Rodar para confirmar falha**
-
-```bash
-cd bot && npx jest tests/payment.test.js --no-coverage
-```
-
-Saída esperada: `Cannot find module '../src/payment'`
-
-- [ ] **Step 3: Implementar `bot/src/payment.js`**
-
-```javascript
-const { MercadoPagoConfig, Payment } = require('mercadopago');
-const { sendText, sendImageBase64 } = require('./evolutionApi');
-const { sendNotification } = require('./notify');
-const { setState, clearState, getState } = require('./state');
-
-const mpClient = new MercadoPagoConfig({
-  accessToken: process.env.MERCADOPAGO_ACCESS_TOKEN,
-});
-
-async function createPixCharge(phone, amount, description) {
-  const payment = new Payment(mpClient);
-  const result = await payment.create({
-    body: {
-      transaction_amount: amount,
-      description,
-      payment_method_id: 'pix',
-      external_reference: phone,
-      payer: { email: `${phone}@whatsapp.bot` },
-    },
-  });
-  return {
-    paymentId: result.id,
-    qrCodeBase64: result.point_of_interaction.transaction_data.qr_code_base64,
-    qrCodeText: result.point_of_interaction.transaction_data.qr_code,
-  };
-}
-
-async function handlePaymentFlow(phone, state, text) {
-  if (text?.toLowerCase() === 'cancelar') {
-    await clearState(phone);
-    await sendText(phone, 'Pagamento cancelado. Como posso ajudar?');
-    return;
-  }
-
-  if (state.step === 0) {
-    const { amount, description } = state.data;
-    await setState(phone, { ...state, step: 1 });
-    await sendText(
-      phone,
-      `Gerar Pix de *R$ ${amount.toFixed(2).replace('.', ',')}* para *${description}*?\n\nDigite "sim" para confirmar ou "cancelar".`
-    );
-    return;
-  }
-
-  if (state.step === 1) {
-    if (text?.toLowerCase() !== 'sim') {
-      await clearState(phone);
-      await sendText(phone, 'Pagamento cancelado. Como posso ajudar?');
-      return;
-    }
-    const { amount, description } = state.data;
-    const { paymentId, qrCodeBase64, qrCodeText } = await createPixCharge(phone, amount, description);
-    await setState(phone, { ...state, step: 2, data: { ...state.data, paymentId } });
-    await sendText(phone, `📋 *Pix copia e cola:*\n\n${qrCodeText}\n\nPix válido por 30 minutos.`);
-    await sendImageBase64(phone, qrCodeBase64, 'QR Code Pix');
-    return;
-  }
-
-  if (state.step === 2) {
-    await sendText(phone, 'Aguardando confirmação do seu Pix. Digite "cancelar" para desistir.');
-  }
-}
-
-async function handlePaymentWebhook(body, status) {
-  if (status !== 'approved') return;
-  const phone = body.external_reference;
-  if (!phone) return;
-  await sendNotification(phone, '✅ Pagamento recebido! Obrigado. Em breve entraremos em contato para confirmar os próximos passos.');
-  await clearState(phone);
-}
-
-module.exports = { createPixCharge, handlePaymentFlow, handlePaymentWebhook };
-```
-
-- [ ] **Step 4: Rodar para confirmar que passa**
-
-```bash
-npx jest tests/payment.test.js --no-coverage
-```
-
-Saída esperada: `PASS tests/payment.test.js` — 7 testes passando.
-
-- [ ] **Step 5: Commit**
-
-```bash
-cd ..
-git add bot/src/payment.js bot/tests/payment.test.js
-git commit -m "feat: add payment module with Mercado Pago Pix"
-```
-
----
-
-## Task 9: Refatorar `webhook.js` (TDD)
+## Task 7: Refatorar `webhook.js` (TDD)
 
 **Files:**
 - Modify: `bot/src/webhook.js`
@@ -1614,8 +868,6 @@ const { getState, setState, clearState, setHumanMode, isHumanMode } = require('.
 const { isOpen, getClosedMessage } = require('./businessHours');
 const { sendNotification } = require('./notify');
 const { handleCatalogFlow } = require('./catalog');
-const { handleSchedulingFlow } = require('./scheduling');
-const { handlePaymentFlow } = require('./payment');
 
 function isPrivateChat(remoteJid) {
   return remoteJid.endsWith('@s.whatsapp.net');
@@ -1659,15 +911,8 @@ async function processMessage(phone, text) {
     await handleCatalogFlow(phone, state, text);
     return null;
   }
-  if (state.flow === 'scheduling') {
-    await handleSchedulingFlow(phone, state, text);
-    return null;
-  }
-  if (state.flow === 'payment') {
-    await handlePaymentFlow(phone, state, text);
-    return null;
-  }
 
+  // flows de scheduling e payment serão adicionados na Parte 2
   const history = await getHistory(phone);
   const reply = await chat(history, text);
 
@@ -1678,20 +923,6 @@ async function processMessage(phone, text) {
   if (reply === '__CATALOG__') {
     await setState(phone, { flow: 'catalog', step: 0, data: {} });
     await handleCatalogFlow(phone, { flow: 'catalog', step: 0, data: {} }, text);
-    return null;
-  }
-  if (reply === '__SCHEDULE__') {
-    await setState(phone, { flow: 'scheduling', step: 0, data: {} });
-    await handleSchedulingFlow(phone, { flow: 'scheduling', step: 0, data: {} }, text);
-    return null;
-  }
-  if (reply?.startsWith('__PAYMENT__:')) {
-    const parts = reply.split(':');
-    const amount = parseFloat(parts[1]);
-    const description = parts.slice(2).join(':');
-    const newState = { flow: 'payment', step: 0, data: { amount, description } };
-    await setState(phone, newState);
-    await handlePaymentFlow(phone, newState, text);
     return null;
   }
 
@@ -1707,13 +938,10 @@ async function handleWebhook(req, res) {
 
   const { event, data } = req.body;
 
-  // Comandos vêm de mensagens fromMe (atendente usando o app)
   if (data?.key?.fromMe) {
     const text = extractMessage(data);
     const command = parseCommand(text);
-    if (command) {
-      return handleCommand(command, res);
-    }
+    if (command) return handleCommand(command, res);
     return res.sendStatus(200);
   }
 
@@ -1767,7 +995,6 @@ jest.mock('../src/openai', () => ({ chat: jest.fn() }));
 jest.mock('../src/evolutionApi', () => ({
   sendText: jest.fn(),
   sendList: jest.fn(),
-  sendImageBase64: jest.fn(),
   registerWebhook: jest.fn(),
 }));
 jest.mock('../src/state', () => ({
@@ -1783,8 +1010,6 @@ jest.mock('../src/businessHours', () => ({
 }));
 jest.mock('../src/notify', () => ({ sendNotification: jest.fn() }));
 jest.mock('../src/catalog', () => ({ handleCatalogFlow: jest.fn() }));
-jest.mock('../src/scheduling', () => ({ handleSchedulingFlow: jest.fn() }));
-jest.mock('../src/payment', () => ({ handlePaymentFlow: jest.fn() }));
 
 const request = require('supertest');
 const express = require('express');
@@ -1818,7 +1043,6 @@ beforeEach(() => {
   getState.mockResolvedValue({ mode: 'bot', flow: null, step: 0, data: {} });
 });
 
-// --- Auth ---
 test('retorna 401 sem token válido', async () => {
   await request(app).post('/webhook').send(validPayload).expect(401);
 });
@@ -1827,7 +1051,6 @@ test('retorna 401 com token errado', async () => {
   await request(app).post('/webhook').set('x-api-key', 'errado').send(validPayload).expect(401);
 });
 
-// --- Filtros básicos ---
 test('ignora mensagens de grupos', async () => {
   const payload = { ...validPayload, data: { ...validPayload.data, key: { ...validPayload.data.key, remoteJid: '123@g.us' } } };
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
@@ -1840,7 +1063,6 @@ test('ignora eventos que não são messages.upsert', async () => {
   expect(chat).not.toHaveBeenCalled();
 });
 
-// --- Comandos fromMe ---
 test('processa comando /bot on de mensagem fromMe', async () => {
   clearState.mockResolvedValue(undefined);
   sendNotification.mockResolvedValue(undefined);
@@ -1863,7 +1085,6 @@ test('processa comando /notify de mensagem fromMe', async () => {
   expect(sendNotification).toHaveBeenCalledWith('5511888888888', 'Seu pedido chegou!');
 });
 
-// --- Modo humano ---
 test('ignora mensagem quando bot está em modo humano', async () => {
   isHumanMode.mockResolvedValue(true);
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
@@ -1871,7 +1092,6 @@ test('ignora mensagem quando bot está em modo humano', async () => {
   expect(chat).not.toHaveBeenCalled();
 });
 
-// --- Horário ---
 test('responde com closedMessage quando fora do horário', async () => {
   isOpen.mockReturnValue(false);
   getClosedMessage.mockReturnValue('Estamos fechados!');
@@ -1882,7 +1102,6 @@ test('responde com closedMessage quando fora do horário', async () => {
   expect(chat).not.toHaveBeenCalled();
 });
 
-// --- Flow ativo ---
 test('roteia para handleCatalogFlow quando flow=catalog', async () => {
   getState.mockResolvedValue({ mode: 'bot', flow: 'catalog', step: 1, data: {} });
   handleCatalogFlow.mockResolvedValue(undefined);
@@ -1891,7 +1110,6 @@ test('roteia para handleCatalogFlow quando flow=catalog', async () => {
   expect(handleCatalogFlow).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'catalog' }), 'Qual o horário de atendimento?');
 });
 
-// --- OpenAI flow normal ---
 test('processa mensagem válida com OpenAI e envia resposta', async () => {
   getHistory.mockResolvedValue([]);
   chat.mockResolvedValue('Atendemos das 9h às 18h.');
@@ -1925,7 +1143,6 @@ test('detecta __CATALOG__ e inicia flow de catálogo', async () => {
   expect(handleCatalogFlow).toHaveBeenCalled();
 });
 
-// --- Helpers ---
 test('isPrivateChat identifica chat privado', () => {
   expect(isPrivateChat('5511999999999@s.whatsapp.net')).toBe(true);
   expect(isPrivateChat('123456@g.us')).toBe(false);
@@ -1937,8 +1154,7 @@ test('parseCommand retorna null para texto sem /', () => {
 });
 
 test('parseCommand retorna cmd e args para comando válido', () => {
-  const result = parseCommand('/bot on 5511999999999');
-  expect(result).toEqual({ cmd: '/bot', args: ['on', '5511999999999'] });
+  expect(parseCommand('/bot on 5511999999999')).toEqual({ cmd: '/bot', args: ['on', '5511999999999'] });
 });
 
 test('extractMessage lê de conversation', () => {
@@ -1960,41 +1176,39 @@ test('extractMessage retorna null para tipos não suportados', () => {
 cd bot && npx jest tests/webhook.test.js --no-coverage
 ```
 
-Saída esperada: `PASS tests/webhook.test.js` — 20 testes passando.
+Saída esperada: `PASS tests/webhook.test.js` — 18 testes passando.
 
-- [ ] **Step 4: Rodar todos os testes para garantir que nada quebrou**
+- [ ] **Step 4: Rodar todos os testes**
 
 ```bash
 npx jest --no-coverage
 ```
 
-Saída esperada: `Test Suites: 8 passed, 8 total`
+Saída esperada: `Test Suites: 7 passed, 7 total`
 
 - [ ] **Step 5: Commit**
 
 ```bash
 cd ..
 git add bot/src/webhook.js bot/tests/webhook.test.js
-git commit -m "feat: refactor webhook with state routing, commands, business hours and flow handlers"
+git commit -m "feat: refactor webhook with state routing, commands and business hours"
 ```
 
 ---
 
-## Task 10: Atualizar `index.js` — novas rotas e reagendamento de lembretes
+## Task 8: Atualizar `index.js` — rota `/notify`
 
 **Files:**
 - Modify: `bot/src/index.js`
 
-- [ ] **Step 1: Substituir `bot/src/index.js` pelo conteúdo completo**
+- [ ] **Step 1: Substituir `bot/src/index.js`**
 
 ```javascript
 require('dotenv').config();
 const express = require('express');
 const { handleWebhook } = require('./webhook');
 const { registerWebhook } = require('./evolutionApi');
-const { handlePaymentWebhook } = require('./payment');
 const { sendNotification } = require('./notify');
-const { rescheduleAllReminders } = require('./scheduling');
 
 const app = express();
 app.use(express.json());
@@ -2021,29 +1235,10 @@ app.post('/notify', async (req, res) => {
   }
 });
 
-app.post('/payment/webhook', async (req, res) => {
-  try {
-    const status = req.query['data.status'] || req.body?.status;
-    await handlePaymentWebhook(req.body, status);
-    res.sendStatus(200);
-  } catch (err) {
-    console.error('Erro ao processar webhook de pagamento:', err.message);
-    res.sendStatus(500);
-  }
-});
-
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
   console.log(`Bot rodando na porta ${PORT}`);
-
-  try {
-    await rescheduleAllReminders();
-    console.log('Lembretes pendentes reagendados.');
-  } catch (err) {
-    console.warn('Aviso: não foi possível reagendar lembretes.', err.message);
-  }
-
   const botUrl = process.env.BOT_WEBHOOK_URL || `http://bot:${PORT}`;
   try {
     await registerWebhook(botUrl);
@@ -2055,32 +1250,32 @@ app.listen(PORT, async () => {
 });
 ```
 
-- [ ] **Step 2: Rodar todos os testes para confirmar que nada quebrou**
+- [ ] **Step 2: Rodar todos os testes**
 
 ```bash
 cd bot && npx jest --no-coverage
 ```
 
-Saída esperada: `Test Suites: 8 passed, 8 total` — todos os testes passando.
+Saída esperada: `Test Suites: 7 passed, 7 total`
 
 - [ ] **Step 3: Commit**
 
 ```bash
 cd ..
 git add bot/src/index.js
-git commit -m "feat: add /notify and /payment/webhook routes with reminder reschedule on startup"
+git commit -m "feat: add POST /notify route for proactive notifications"
 ```
 
 ---
 
-## Task 11: Atualizar system prompt do OpenAI para detectar intenções
+## Task 9: Atualizar system prompt do OpenAI
 
 **Files:**
 - Modify: `bot/src/openai.js`
 
-- [ ] **Step 1: Atualizar `buildSystemPrompt` para incluir instruções de intenções especiais**
+- [ ] **Step 1: Atualizar `buildSystemPrompt` em `bot/src/openai.js`**
 
-Em `bot/src/openai.js`, alterar o return da função `buildSystemPrompt`:
+Substituir o `return` da função `buildSystemPrompt`:
 
 ```javascript
 function buildSystemPrompt() {
@@ -2099,14 +1294,11 @@ Responda apenas dúvidas relacionadas à ${company.nome}. Se a pergunta não for
 
 INSTRUÇÕES ESPECIAIS — responda APENAS com o token abaixo (sem texto adicional) quando detectar estas intenções:
 - Cliente quer falar com humano/atendente → responda exatamente: __TRANSFER__
-- Cliente quer ver produtos, serviços, cardápio ou catálogo → responda exatamente: __CATALOG__
-- Cliente quer agendar, marcar horário ou fazer reserva → responda exatamente: __SCHEDULE__
-- Cliente quer pagar, gerar Pix ou fazer pagamento (menciona valor) → responda exatamente: __PAYMENT__:{valor_numerico}:{descricao}
-  Exemplo: cliente diz "quero pagar R$ 50 pelo corte" → __PAYMENT__:50.00:Corte de cabelo`;
+- Cliente quer ver produtos, serviços, cardápio ou catálogo → responda exatamente: __CATALOG__`;
 }
 ```
 
-- [ ] **Step 2: Rodar os testes do openai.js para confirmar que ainda passam**
+- [ ] **Step 2: Rodar testes do openai**
 
 ```bash
 cd bot && npx jest tests/openai.test.js --no-coverage
@@ -2120,12 +1312,12 @@ Saída esperada: `PASS tests/openai.test.js` — 4 testes passando.
 npx jest --no-coverage
 ```
 
-Saída esperada: `Test Suites: 8 passed, 8 total`
+Saída esperada: `Test Suites: 7 passed, 7 total`
 
 - [ ] **Step 4: Commit**
 
 ```bash
 cd ..
 git add bot/src/openai.js
-git commit -m "feat: add special intent tokens to OpenAI system prompt"
+git commit -m "feat: add TRANSFER and CATALOG intent tokens to system prompt"
 ```
