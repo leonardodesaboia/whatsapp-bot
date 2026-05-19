@@ -64,6 +64,7 @@ services:
       - EVOLUTION_API_URL=http://evolution-api:8080
       - REDIS_URL=redis://redis:6379
       - BOT_WEBHOOK_URL=${BOT_WEBHOOK_URL:-http://bot:3000}
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/crm
     volumes:
       - ./company.json:/app/company.json:ro
       - ./catalog.json:/app/catalog.json:ro
@@ -73,6 +74,23 @@ services:
       evolution-api:
         condition: service_started
       redis:
+        condition: service_healthy
+    networks:
+      - bot-net
+
+  crm:
+    build: ./crm
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/crm
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: http://localhost:3001
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      postgres:
         condition: service_healthy
     networks:
       - bot-net
