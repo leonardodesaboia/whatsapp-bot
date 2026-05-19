@@ -67,6 +67,7 @@ services:
     volumes:
       - ./company.json:/app/company.json:ro
       - ./catalog.json:/app/catalog.json:ro
+      - ./contacts.json:/app/contacts.json:ro
       - ./google-credentials.json:/app/google-credentials.json:ro
     depends_on:
       evolution-api:
