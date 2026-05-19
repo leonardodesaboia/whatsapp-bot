@@ -57,7 +57,7 @@ async function chatWithImage(base64, caption) {
       ],
     },
   ];
-  const response = await openai.chat.completions.create({ model: 'gpt-4o', messages });
+  const response = await openai.chat.completions.create({ model: process.env.OPENAI_MODEL || 'gpt-4o', messages });
   if (!response.choices?.length) return 'Não consegui analisar a imagem.';
   return response.choices[0].message.content;
 }
