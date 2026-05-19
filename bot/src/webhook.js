@@ -7,7 +7,8 @@ function isPrivateChat(remoteJid) {
 }
 
 function extractMessage(data) {
-  const msg = data.message;
+  const msg = data?.message;
+  if (!msg) return null;
   return (
     msg.conversation ||
     msg.extendedTextMessage?.text ||
