@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Bash(npx jest *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(node -e \"const redis = require\\('./src/redis'\\); console.log\\('module loads ok'\\)\")",
+      "Skill(code-review:code-review)",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
