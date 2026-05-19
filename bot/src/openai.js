@@ -4,10 +4,11 @@ const path = require('path');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const company = JSON.parse(
+  fs.readFileSync(path.join(__dirname, '../../company.json'), 'utf8')
+);
+
 function buildSystemPrompt() {
-  const company = JSON.parse(
-    fs.readFileSync(path.join(__dirname, '../../company.json'), 'utf8')
-  );
   const faqText = company.faq
     .map((f) => `P: ${f.pergunta}\nR: ${f.resposta}`)
     .join('\n\n');
@@ -32,6 +33,9 @@ async function chat(history, userMessage) {
     model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     messages,
   });
+  if (!response.choices?.length) {
+    return 'Desculpe, não consegui processar sua mensagem no momento. Tente novamente.';
+  }
   return response.choices[0].message.content;
 }
 
