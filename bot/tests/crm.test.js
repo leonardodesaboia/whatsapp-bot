@@ -16,7 +16,7 @@ test('upsertLead consulta primeira etapa e faz upsert do lead', async () => {
     .mockResolvedValueOnce({ rows: [{ id: 1 }] })
     .mockResolvedValueOnce({ rows: [] });
 
-  await upsertLead('5511999999999', 'João', 'Olá', 'text');
+  await upsertLead('5511999999999', 'João', 'Olá');
 
   expect(mockQuery).toHaveBeenCalledTimes(2);
   expect(mockQuery).toHaveBeenNthCalledWith(
@@ -27,7 +27,7 @@ test('upsertLead consulta primeira etapa e faz upsert do lead', async () => {
   expect(mockQuery).toHaveBeenNthCalledWith(
     2,
     expect.stringContaining('INSERT INTO leads'),
-    expect.arrayContaining(['5511999999999', 'João', 'Olá', 1])
+    ['5511999999999', 'João', 'Olá', 1]
   );
 });
 
@@ -36,18 +36,18 @@ test('upsertLead usa stage_id null quando não há etapas', async () => {
     .mockResolvedValueOnce({ rows: [] })
     .mockResolvedValueOnce({ rows: [] });
 
-  await upsertLead('5511999999999', null, 'Olá', 'text');
+  await upsertLead('5511999999999', null, 'Olá');
 
   expect(mockQuery).toHaveBeenNthCalledWith(
     2,
     expect.stringContaining('INSERT INTO leads'),
-    expect.arrayContaining(['5511999999999', null, 'Olá', null])
+    ['5511999999999', null, 'Olá', null]
   );
 });
 
 test('upsertLead não lança erro quando PostgreSQL falha', async () => {
   mockQuery.mockRejectedValue(new Error('connection refused'));
-  await expect(upsertLead('5511999999999', 'João', 'Olá', 'text')).resolves.not.toThrow();
+  await expect(upsertLead('5511999999999', 'João', 'Olá')).resolves.not.toThrow();
 });
 
 test('addInteraction insere interação pelo phone do lead', async () => {
