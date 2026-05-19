@@ -5,6 +5,9 @@ const catalog = JSON.parse(
   fs.readFileSync(path.join(__dirname, '../../catalog.json'), 'utf8')
 );
 
+const { sendText, sendList } = require('./evolutionApi');
+const { setState, clearState } = require('./state');
+
 function getCategories() {
   return catalog.categories;
 }
@@ -55,9 +58,6 @@ function buildItemListMessage(categoryId) {
 }
 
 async function handleCatalogFlow(phone, state, text) {
-  const { sendText, sendList } = require('./evolutionApi');
-  const { setState, clearState } = require('./state');
-
   if (text?.toLowerCase() === 'cancelar') {
     await clearState(phone);
     await sendText(phone, 'Tudo bem! Como posso ajudar?');

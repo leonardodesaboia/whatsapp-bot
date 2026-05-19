@@ -38,7 +38,7 @@
 
 ---
 
-## Task 1: Scaffold — arquivos de configuração
+## ✅ Task 1: Scaffold — arquivos de configuração
 
 **Files:**
 - Modify: `company.json`
@@ -161,7 +161,7 @@ git commit -m "chore: scaffold part1 config files"
 
 ---
 
-## Task 2: Expor `getClient` + adicionar `sendList` à `evolutionApi`
+## ✅ Task 2: Expor `getClient` + adicionar `sendList` à `evolutionApi`
 
 **Files:**
 - Modify: `bot/src/redis.js`
@@ -237,7 +237,7 @@ git commit -m "feat: export getClient and add sendList to evolutionApi"
 
 ---
 
-## Task 3: `state.js` — gerenciamento de estado de conversa (TDD)
+## ✅ Task 3: `state.js` — gerenciamento de estado de conversa (TDD)
 
 **Files:**
 - Create: `bot/src/state.js`
@@ -389,7 +389,7 @@ git commit -m "feat: add conversation state module with Redis TTL"
 
 ---
 
-## Task 4: `businessHours.js` — verificação de horário (TDD)
+## ✅ Task 4: `businessHours.js` — verificação de horário (TDD)
 
 **Files:**
 - Create: `bot/src/businessHours.js`
@@ -494,7 +494,7 @@ git commit -m "feat: add business hours check with timezone support"
 
 ---
 
-## Task 5: `notify.js` — notificações proativas (TDD)
+## ✅ Task 5: `notify.js` — notificações proativas (TDD)
 
 **Files:**
 - Create: `bot/src/notify.js`

@@ -7,7 +7,9 @@
       "Bash(git commit *)",
       "Bash(node -e \"const redis = require\\('./src/redis'\\); console.log\\('module loads ok'\\)\")",
       "Skill(code-review:code-review)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(npm test *)",
+      "Bash(node -e \"const m = require\\('./src/state'\\); console.log\\('Exports:', Object.keys\\(m\\)\\)\")"
     ]
   }
 }
