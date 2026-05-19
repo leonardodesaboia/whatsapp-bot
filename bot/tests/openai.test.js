@@ -20,7 +20,7 @@ jest.mock('fs', () => ({
 
 process.env.OPENAI_API_KEY = 'test-key';
 
-const { chat, buildSystemPrompt } = require('../src/openai');
+const { chat, buildSystemPrompt, chatWithImage } = require('../src/openai');
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -61,4 +61,28 @@ test('chat usa o modelo definido em OPENAI_MODEL', async () => {
   await chat([], 'teste');
   expect(mockCreate.mock.calls[0][0].model).toBe('gpt-4o');
   delete process.env.OPENAI_MODEL;
+});
+
+test('chatWithImage envia imagem base64 para GPT-4o e retorna resposta', async () => {
+  mockCreate.mockResolvedValue({
+    choices: [{ message: { content: 'Vejo uma imagem de produto de beleza.' } }],
+  });
+  const result = await chatWithImage('base64data', 'O que é isso?');
+  expect(result).toBe('Vejo uma imagem de produto de beleza.');
+  const call = mockCreate.mock.calls[0][0];
+  expect(call.model).toBe('gpt-4o');
+  expect(call.messages[0].role).toBe('system');
+  const userContent = call.messages[1].content;
+  expect(userContent).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ type: 'image_url' }),
+      expect.objectContaining({ type: 'text', text: 'O que é isso?' }),
+    ])
+  );
+});
+
+test('chatWithImage retorna fallback quando OpenAI não retorna choices', async () => {
+  mockCreate.mockResolvedValue({ choices: [] });
+  const result = await chatWithImage('base64data', '');
+  expect(result).toBe('Não consegui analisar a imagem.');
 });

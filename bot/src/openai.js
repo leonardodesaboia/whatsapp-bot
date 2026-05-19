@@ -46,4 +46,20 @@ async function chat(history, userMessage) {
   return response.choices[0].message.content;
 }
 
-module.exports = { chat, buildSystemPrompt };
+async function chatWithImage(base64, caption) {
+  const messages = [
+    { role: 'system', content: buildSystemPrompt() },
+    {
+      role: 'user',
+      content: [
+        { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } },
+        { type: 'text', text: caption || 'O que você vê nesta imagem? Responda no contexto da empresa.' },
+      ],
+    },
+  ];
+  const response = await openai.chat.completions.create({ model: 'gpt-4o', messages });
+  if (!response.choices?.length) return 'Não consegui analisar a imagem.';
+  return response.choices[0].message.content;
+}
+
+module.exports = { chat, buildSystemPrompt, chatWithImage };
