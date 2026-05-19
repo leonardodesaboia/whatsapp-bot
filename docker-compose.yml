@@ -66,6 +66,7 @@ services:
       - BOT_WEBHOOK_URL=${BOT_WEBHOOK_URL:-http://bot:3000}
     volumes:
       - ./company.json:/app/company.json:ro
+      - ./catalog.json:/app/catalog.json:ro
     depends_on:
       evolution-api:
         condition: service_started

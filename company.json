@@ -20,5 +20,18 @@
       "pergunta": "Como faço um pedido?",
       "resposta": "Acesse nosso site em empresaxyz.com.br ou entre em contato pelo WhatsApp."
     }
-  ]
+  ],
+  "businessHours": {
+    "timezone": "America/Sao_Paulo",
+    "schedule": {
+      "mon": { "open": "09:00", "close": "18:00" },
+      "tue": { "open": "09:00", "close": "18:00" },
+      "wed": { "open": "09:00", "close": "18:00" },
+      "thu": { "open": "09:00", "close": "18:00" },
+      "fri": { "open": "09:00", "close": "18:00" },
+      "sat": null,
+      "sun": null
+    },
+    "closedMessage": "Estamos fechados no momento. Nosso horário é segunda a sexta das 9h às 18h. Retornaremos em breve!"
+  }
 }
