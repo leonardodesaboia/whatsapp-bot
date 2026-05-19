@@ -46,8 +46,10 @@ WhatsApp → Evolution API → POST /webhook → webhook.js → state.js → flo
 4. Verifica modo humano (`isHumanMode`) — se ativo, ignora a mensagem
 5. Verifica horário de atendimento (`isOpen`) — se fechado, responde com `closedMessage`
 6. Responde 200 imediatamente e processa de forma assíncrona
-7. Em `processMessage`: roteia para o flow handler ativo (catalog/scheduling/payment) ou chama OpenAI
-8. OpenAI pode retornar tokens especiais que ativam flows: `__TRANSFER__`, `__CATALOG__`, `__SCHEDULE__`, `__PAYMENT__:{valor}:{descricao}`
+7. Detecta tipo de mídia: texto, áudio (`audioMessage`) ou imagem (`imageMessage`)
+8. Imagens são roteadas para `handleImageMessage`; áudio é transcrito via Whisper antes de seguir o pipeline normal
+9. Em `processMessage`: roteia para o flow handler ativo (catalog/scheduling/payment) ou chama OpenAI
+10. OpenAI pode retornar tokens especiais que ativam flows: `__TRANSFER__`, `__CATALOG__`, `__SCHEDULE__`, `__PAYMENT__:{valor}:{descricao}`
 
 **`src/state.js`** gerencia estado de conversa por telefone no Redis (`state:{phone}`). Estrutura: `{ mode, flow, step, data }`. TTL padrão 24h. `setHumanMode` usa TTL de `HUMAN_TAKEOVER_TIMEOUT_MINUTES` minutos.
 
@@ -65,13 +67,21 @@ WhatsApp → Evolution API → POST /webhook → webhook.js → state.js → flo
 
 **`src/redis.js`** usa conexão singleton. Histórico em `history:{phone}` (TTL 24h, máx `MAX_HISTORY` pares). Estado em `state:{phone}`. Lembretes em `reminder:{phone}:{eventId}:{tipo}`. Exporta `getClient` para acesso direto.
 
-**`src/evolutionApi.js`** lê variáveis de ambiente no momento do `require()`. Funções: `sendText`, `sendList` (list messages interativas), `sendImageBase64` (QR code Pix), `registerWebhook`.
+**`src/evolutionApi.js`** lê variáveis de ambiente no momento do `require()`. Funções: `sendText`, `sendList` (list messages interativas), `sendImageBase64` (QR code Pix), `registerWebhook`, `getMediaBase64` (obtém base64 de mídia via Evolution API).
+
+**`src/audio.js`** transcreve mensagens de áudio via OpenAI Whisper. `transcribeAudio(messageData)` obtém o base64 do áudio via `getMediaBase64`, cria um `File` e chama `openai.audio.transcriptions.create`. Retorna o texto transcrito ou `null` em caso de erro. O idioma é configurável via `WHISPER_LANGUAGE`.
+
+**`src/image.js`** descreve imagens via GPT-4o Vision. `handleImageMessage(phone, messageData)` obtém o base64 da imagem via `getMediaBase64`, chama `chatWithImage` do `openai.js` e envia a resposta com `sendText`. Erros são tratados silenciosamente.
+
+**`src/broadcast.js`** envia mensagens em massa para a lista de contatos em `contacts.json`. `loadContacts()` lê o arquivo sincronamente. `sendBroadcast(message)` itera os contatos com delay configurável (`BROADCAST_DELAY_MS`), contabiliza envios bem-sucedidos e falhas, e retorna `{ sent, failed }`.
 
 ## Personalização da empresa
 
 Editar `company.json` na raiz. Campos: `nome`, `descricao`, `horario`, `contato`, `faq[]`, `businessHours` (timezone + schedule por dia + closedMessage). Após editar: `docker compose restart bot`.
 
 Editar `catalog.json` na raiz para produtos/serviços. Estrutura: `{ categories: [{ id, title, items: [{ id, title, description, price, duration }] }] }`.
+
+Editar `contacts.json` na raiz para a lista de broadcast. Estrutura: `{ contacts: [{ phone, name }] }`.
 
 ## Variáveis de ambiente obrigatórias
 
@@ -84,6 +94,8 @@ Ver `.env.example`. As críticas:
 - `GOOGLE_APPLICATION_CREDENTIALS` — caminho para o JSON da Service Account Google
 - `MERCADOPAGO_ACCESS_TOKEN` — token de acesso do Mercado Pago
 - `HUMAN_TAKEOVER_TIMEOUT_MINUTES` — minutos até o bot retomar após transferência (padrão: 30)
+- `WHISPER_LANGUAGE` — idioma para transcrição de áudio (padrão: `pt`)
+- `BROADCAST_DELAY_MS` — delay em ms entre envios no broadcast (padrão: `1000`)
 
 ## Comandos internos (mensagens fromMe)
 
@@ -91,12 +103,13 @@ Enviados pelo próprio número do bot no WhatsApp:
 
 - `/bot on {phone}` — reativa o bot para um número em modo humano
 - `/notify {phone} {mensagem}` — envia notificação proativa para um número
+- `/broadcast {mensagem}` — envia mensagem em massa para todos os contatos de `contacts.json`
 
-A rota `POST /notify` (com header `x-api-key`) também dispara notificações via HTTP.
+As rotas HTTP `POST /notify` e `POST /broadcast` (ambas com header `x-api-key`) também disparam esses envios via HTTP.
 
 ## Testes
 
-10 arquivos de teste em `bot/tests/`, um por módulo. Todos os módulos externos são mockados via `jest.mock()`. O webhook usa `supertest` para testar o Express end-to-end.
+13 arquivos de teste em `bot/tests/`, um por módulo. Todos os módulos externos são mockados via `jest.mock()`. O webhook usa `supertest` para testar o Express end-to-end.
 
 Padrão importante: variáveis de ambiente nos testes devem ser configuradas **antes** do `require()` do módulo, pois vários módulos leem `process.env` no momento do require.
 
