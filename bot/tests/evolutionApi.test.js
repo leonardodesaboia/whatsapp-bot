@@ -8,7 +8,7 @@ process.env.EVOLUTION_API_KEY = 'test-api-key';
 process.env.EVOLUTION_INSTANCE = 'test-instance';
 process.env.WEBHOOK_TOKEN = 'test-webhook-token';
 
-const { sendText, registerWebhook } = require('../src/evolutionApi');
+const { sendText, registerWebhook, sendList } = require('../src/evolutionApi');
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -35,6 +35,17 @@ test('registerWebhook envia PUT com URL e token corretos', async () => {
       base64: false,
       events: ['MESSAGES_UPSERT'],
     },
+    { headers: { apikey: 'test-api-key' } }
+  );
+});
+
+test('sendList envia POST para o endpoint correto', async () => {
+  mockPost.mockResolvedValue({ data: {} });
+  const listMessage = { title: 'Categorias', buttonText: 'Ver', sections: [] };
+  await sendList('5511999999999', listMessage);
+  expect(mockPost).toHaveBeenCalledWith(
+    'http://evolution:8080/message/sendList/test-instance',
+    { number: '5511999999999', ...listMessage },
     { headers: { apikey: 'test-api-key' } }
   );
 });

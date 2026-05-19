@@ -27,4 +27,4 @@ async function appendHistory(phone, userMessage, assistantMessage) {
   await client.set(`history:${phone}`, JSON.stringify(trimmed), { EX: 86400 });
 }
 
-module.exports = { getHistory, appendHistory };
+module.exports = { getHistory, appendHistory, getClient };

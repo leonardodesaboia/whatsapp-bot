@@ -28,4 +28,12 @@ async function registerWebhook(botPublicUrl) {
   );
 }
 
-module.exports = { sendText, registerWebhook };
+async function sendList(to, listMessage) {
+  await axios.post(
+    `${BASE_URL}/message/sendList/${INSTANCE}`,
+    { number: to, ...listMessage },
+    { headers: { apikey: API_KEY } }
+  );
+}
+
+module.exports = { sendText, registerWebhook, sendList };
