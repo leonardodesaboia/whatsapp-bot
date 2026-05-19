@@ -3,6 +3,7 @@ const axios = require('axios');
 const BASE_URL = process.env.EVOLUTION_API_URL;
 const API_KEY = process.env.EVOLUTION_API_KEY;
 const INSTANCE = process.env.EVOLUTION_INSTANCE;
+const WEBHOOK_TOKEN = process.env.WEBHOOK_TOKEN;
 
 async function sendText(to, text) {
   await axios.post(
@@ -18,7 +19,7 @@ async function registerWebhook(botPublicUrl) {
     {
       enabled: true,
       url: `${botPublicUrl}/webhook`,
-      headers: { 'x-api-key': process.env.WEBHOOK_TOKEN },
+      headers: { 'x-api-key': WEBHOOK_TOKEN },
       byEvents: false,
       base64: false,
       events: ['MESSAGES_UPSERT'],
