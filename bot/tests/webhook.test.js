@@ -24,6 +24,12 @@ jest.mock('../src/notify', () => ({ sendNotification: jest.fn() }));
 jest.mock('../src/catalog', () => ({ handleCatalogFlow: jest.fn() }));
 jest.mock('../src/scheduling', () => ({ handleSchedulingFlow: jest.fn() }));
 jest.mock('../src/payment', () => ({ handlePaymentFlow: jest.fn() }));
+jest.mock('../src/audio', () => ({ transcribeAudio: jest.fn() }));
+jest.mock('../src/image', () => ({ handleImageMessage: jest.fn() }));
+jest.mock('../src/broadcast', () => ({
+  sendBroadcast: jest.fn(),
+  loadContacts: jest.fn(),
+}));
 
 const request = require('supertest');
 const express = require('express');
@@ -37,6 +43,9 @@ const { sendNotification } = require('../src/notify');
 const { handleCatalogFlow } = require('../src/catalog');
 const { handleSchedulingFlow } = require('../src/scheduling');
 const { handlePaymentFlow } = require('../src/payment');
+const { transcribeAudio } = require('../src/audio');
+const { handleImageMessage } = require('../src/image');
+const { sendBroadcast, loadContacts } = require('../src/broadcast');
 
 process.env.WEBHOOK_TOKEN = 'test-token';
 
@@ -59,6 +68,10 @@ beforeEach(() => {
   getState.mockResolvedValue({ mode: 'bot', flow: null, step: 0, data: {} });
   handleSchedulingFlow.mockResolvedValue(undefined);
   handlePaymentFlow.mockResolvedValue(undefined);
+  transcribeAudio.mockResolvedValue(null);
+  handleImageMessage.mockResolvedValue(undefined);
+  sendBroadcast.mockResolvedValue({ sent: 2, failed: 0 });
+  loadContacts.mockReturnValue([{ phone: '5511111111111' }, { phone: '5511222222222' }]);
 });
 
 test('retorna 401 sem token válido', async () => {
@@ -219,4 +232,65 @@ test('detecta __PAYMENT__ e inicia flow de pagamento', async () => {
   await new Promise((r) => setTimeout(r, 100));
   expect(setState).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'payment', data: { amount: 50, description: 'Corte de cabelo' } }));
   expect(handlePaymentFlow).toHaveBeenCalled();
+});
+
+test('transcreve áudio e processa como texto normal', async () => {
+  const audioPayload = {
+    event: 'messages.upsert',
+    data: {
+      key: { remoteJid: '5511999999999@s.whatsapp.net', fromMe: false, id: 'msg-audio' },
+      message: { audioMessage: { mimetype: 'audio/ogg; codecs=opus' } },
+    },
+  };
+  transcribeAudio.mockResolvedValue('quero agendar um horário');
+  getHistory.mockResolvedValue([]);
+  chat.mockResolvedValue('Claro! Vamos agendar.');
+  appendHistory.mockResolvedValue(undefined);
+  sendText.mockResolvedValue(undefined);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(audioPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(transcribeAudio).toHaveBeenCalledWith(audioPayload.data);
+  expect(chat).toHaveBeenCalledWith([], 'quero agendar um horário');
+  expect(sendText).toHaveBeenCalledWith('5511999999999', 'Claro! Vamos agendar.');
+});
+
+test('ignora mensagem de áudio quando transcrição retorna null', async () => {
+  const audioPayload = {
+    event: 'messages.upsert',
+    data: {
+      key: { remoteJid: '5511999999999@s.whatsapp.net', fromMe: false, id: 'msg-audio' },
+      message: { audioMessage: {} },
+    },
+  };
+  transcribeAudio.mockResolvedValue(null);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(audioPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(chat).not.toHaveBeenCalled();
+});
+
+test('roteia imagem para handleImageMessage sem chamar OpenAI', async () => {
+  const imagePayload = {
+    event: 'messages.upsert',
+    data: {
+      key: { remoteJid: '5511999999999@s.whatsapp.net', fromMe: false, id: 'msg-img' },
+      message: { imageMessage: { caption: 'O que é isso?' } },
+    },
+  };
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(imagePayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(handleImageMessage).toHaveBeenCalledWith('5511999999999', imagePayload.data);
+  expect(chat).not.toHaveBeenCalled();
+});
+
+test('processa comando /broadcast de mensagem fromMe', async () => {
+  const payload = {
+    ...validPayload,
+    data: {
+      key: { fromMe: true, remoteJid: '5511999999999@s.whatsapp.net' },
+      message: { conversation: '/broadcast Promoção especial!' },
+    },
+  };
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(sendBroadcast).toHaveBeenCalledWith('Promoção especial!');
 });

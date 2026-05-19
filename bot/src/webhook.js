@@ -7,6 +7,9 @@ const { sendNotification } = require('./notify');
 const { handleCatalogFlow } = require('./catalog');
 const { handleSchedulingFlow } = require('./scheduling');
 const { handlePaymentFlow } = require('./payment');
+const { transcribeAudio } = require('./audio');
+const { handleImageMessage } = require('./image');
+const { sendBroadcast, loadContacts } = require('./broadcast');
 
 function isPrivateChat(remoteJid) {
   return remoteJid.endsWith('@s.whatsapp.net');
@@ -38,6 +41,19 @@ async function handleCommand(parsed, res) {
     const message = args.slice(1).join(' ');
     await sendNotification(phone, message);
     return res.json({ ok: true });
+  }
+
+  if (cmd === '/broadcast' && args.length >= 1) {
+    const message = args.join(' ');
+    const contacts = loadContacts();
+    (async () => {
+      try {
+        await sendBroadcast(message);
+      } catch (err) {
+        console.error('Erro no broadcast:', err.message);
+      }
+    })();
+    return res.json({ ok: true, queued: contacts.length });
   }
 
   return res.sendStatus(200);
@@ -110,7 +126,10 @@ async function handleWebhook(req, res) {
   if (!isPrivateChat(data.key.remoteJid)) return res.sendStatus(200);
 
   const text = extractMessage(data);
-  if (!text) return res.sendStatus(200);
+  const hasAudio = !text && !!data.message?.audioMessage;
+  const hasImage = !text && !!data.message?.imageMessage;
+
+  if (!text && !hasAudio && !hasImage) return res.sendStatus(200);
 
   const phone = data.key.remoteJid.replace('@s.whatsapp.net', '');
 
@@ -132,7 +151,18 @@ async function handleWebhook(req, res) {
 
   (async () => {
     try {
-      const reply = await processMessage(phone, text);
+      if (hasImage) {
+        await handleImageMessage(phone, data);
+        return;
+      }
+
+      let messageText = text;
+      if (hasAudio) {
+        messageText = await transcribeAudio(data);
+        if (!messageText) return;
+      }
+
+      const reply = await processMessage(phone, messageText);
       if (reply) await sendText(phone, reply);
     } catch (err) {
       console.error('Erro ao processar mensagem:', err.message);
