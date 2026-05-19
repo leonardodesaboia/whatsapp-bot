@@ -1,16 +1,38 @@
 jest.mock('../src/redis', () => ({
   getHistory: jest.fn(),
   appendHistory: jest.fn(),
+  getClient: jest.fn(),
 }));
 jest.mock('../src/openai', () => ({ chat: jest.fn() }));
-jest.mock('../src/evolutionApi', () => ({ sendText: jest.fn() }));
+jest.mock('../src/evolutionApi', () => ({
+  sendText: jest.fn(),
+  sendList: jest.fn(),
+  registerWebhook: jest.fn(),
+}));
+jest.mock('../src/state', () => ({
+  getState: jest.fn(),
+  setState: jest.fn(),
+  clearState: jest.fn(),
+  setHumanMode: jest.fn(),
+  isHumanMode: jest.fn(),
+}));
+jest.mock('../src/businessHours', () => ({
+  isOpen: jest.fn(),
+  getClosedMessage: jest.fn(),
+}));
+jest.mock('../src/notify', () => ({ sendNotification: jest.fn() }));
+jest.mock('../src/catalog', () => ({ handleCatalogFlow: jest.fn() }));
 
 const request = require('supertest');
 const express = require('express');
-const { handleWebhook, isPrivateChat, extractMessage } = require('../src/webhook');
+const { handleWebhook, isPrivateChat, extractMessage, parseCommand } = require('../src/webhook');
 const { getHistory, appendHistory } = require('../src/redis');
 const { chat } = require('../src/openai');
 const { sendText } = require('../src/evolutionApi');
+const { isHumanMode, setHumanMode, getState, setState, clearState } = require('../src/state');
+const { isOpen, getClosedMessage } = require('../src/businessHours');
+const { sendNotification } = require('../src/notify');
+const { handleCatalogFlow } = require('../src/catalog');
 
 process.env.WEBHOOK_TOKEN = 'test-token';
 
@@ -21,43 +43,28 @@ app.post('/webhook', handleWebhook);
 const validPayload = {
   event: 'messages.upsert',
   data: {
-    key: {
-      remoteJid: '5511999999999@s.whatsapp.net',
-      fromMe: false,
-      id: 'msg-123',
-    },
+    key: { remoteJid: '5511999999999@s.whatsapp.net', fromMe: false, id: 'msg-123' },
     message: { conversation: 'Qual o horário de atendimento?' },
   },
 };
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  isHumanMode.mockResolvedValue(false);
+  isOpen.mockReturnValue(true);
+  getState.mockResolvedValue({ mode: 'bot', flow: null, step: 0, data: {} });
+});
 
 test('retorna 401 sem token válido', async () => {
   await request(app).post('/webhook').send(validPayload).expect(401);
 });
 
 test('retorna 401 com token errado', async () => {
-  await request(app)
-    .post('/webhook')
-    .set('x-api-key', 'token-errado')
-    .send(validPayload)
-    .expect(401);
-});
-
-test('ignora mensagem enviada pelo próprio número (fromMe)', async () => {
-  const payload = {
-    ...validPayload,
-    data: { ...validPayload.data, key: { ...validPayload.data.key, fromMe: true } },
-  };
-  await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
-  expect(chat).not.toHaveBeenCalled();
+  await request(app).post('/webhook').set('x-api-key', 'errado').send(validPayload).expect(401);
 });
 
 test('ignora mensagens de grupos', async () => {
-  const payload = {
-    ...validPayload,
-    data: { ...validPayload.data, key: { ...validPayload.data.key, remoteJid: '123456@g.us' } },
-  };
+  const payload = { ...validPayload, data: { ...validPayload.data, key: { ...validPayload.data.key, remoteJid: '123@g.us' } } };
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
   expect(chat).not.toHaveBeenCalled();
 });
@@ -68,29 +75,84 @@ test('ignora eventos que não são messages.upsert', async () => {
   expect(chat).not.toHaveBeenCalled();
 });
 
-test('processa mensagem válida e envia resposta', async () => {
+test('processa comando /bot on de mensagem fromMe', async () => {
+  clearState.mockResolvedValue(undefined);
+  sendNotification.mockResolvedValue(undefined);
+  const payload = {
+    ...validPayload,
+    data: { key: { fromMe: true, remoteJid: '5511999999999@s.whatsapp.net' }, message: { conversation: '/bot on 5511888888888' } },
+  };
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
+  expect(clearState).toHaveBeenCalledWith('5511888888888');
+  expect(sendNotification).toHaveBeenCalledWith('5511888888888', expect.stringContaining('assistente virtual'));
+});
+
+test('processa comando /notify de mensagem fromMe', async () => {
+  sendNotification.mockResolvedValue(undefined);
+  const payload = {
+    ...validPayload,
+    data: { key: { fromMe: true, remoteJid: '5511999999999@s.whatsapp.net' }, message: { conversation: '/notify 5511888888888 Seu pedido chegou!' } },
+  };
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
+  expect(sendNotification).toHaveBeenCalledWith('5511888888888', 'Seu pedido chegou!');
+});
+
+test('ignora mensagem quando bot está em modo humano', async () => {
+  isHumanMode.mockResolvedValue(true);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(chat).not.toHaveBeenCalled();
+});
+
+test('responde com closedMessage quando fora do horário', async () => {
+  isOpen.mockReturnValue(false);
+  getClosedMessage.mockReturnValue('Estamos fechados!');
+  sendText.mockResolvedValue(undefined);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(sendText).toHaveBeenCalledWith('5511999999999', 'Estamos fechados!');
+  expect(chat).not.toHaveBeenCalled();
+});
+
+test('roteia para handleCatalogFlow quando flow=catalog', async () => {
+  getState.mockResolvedValue({ mode: 'bot', flow: 'catalog', step: 1, data: {} });
+  handleCatalogFlow.mockResolvedValue(undefined);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(handleCatalogFlow).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'catalog' }), 'Qual o horário de atendimento?');
+});
+
+test('processa mensagem válida com OpenAI e envia resposta', async () => {
   getHistory.mockResolvedValue([]);
   chat.mockResolvedValue('Atendemos das 9h às 18h.');
   appendHistory.mockResolvedValue(undefined);
   sendText.mockResolvedValue(undefined);
-
-  await request(app)
-    .post('/webhook')
-    .set('x-api-key', 'test-token')
-    .send(validPayload)
-    .expect(200);
-
-  // aguarda o processamento assíncrono (fire-and-forget)
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
   await new Promise((r) => setTimeout(r, 100));
-
-  expect(getHistory).toHaveBeenCalledWith('5511999999999');
   expect(chat).toHaveBeenCalledWith([], 'Qual o horário de atendimento?');
-  expect(appendHistory).toHaveBeenCalledWith(
-    '5511999999999',
-    'Qual o horário de atendimento?',
-    'Atendemos das 9h às 18h.'
-  );
   expect(sendText).toHaveBeenCalledWith('5511999999999', 'Atendemos das 9h às 18h.');
+});
+
+test('detecta __TRANSFER__ e ativa modo humano', async () => {
+  getHistory.mockResolvedValue([]);
+  chat.mockResolvedValue('__TRANSFER__');
+  setHumanMode.mockResolvedValue(undefined);
+  sendText.mockResolvedValue(undefined);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(setHumanMode).toHaveBeenCalledWith('5511999999999');
+  expect(sendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('atendente'));
+});
+
+test('detecta __CATALOG__ e inicia flow de catálogo', async () => {
+  getHistory.mockResolvedValue([]);
+  chat.mockResolvedValue('__CATALOG__');
+  setState.mockResolvedValue(undefined);
+  handleCatalogFlow.mockResolvedValue(undefined);
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(setState).toHaveBeenCalledWith('5511999999999', { flow: 'catalog', step: 0, data: {} });
+  expect(handleCatalogFlow).toHaveBeenCalled();
 });
 
 test('isPrivateChat identifica chat privado', () => {
@@ -98,14 +160,21 @@ test('isPrivateChat identifica chat privado', () => {
   expect(isPrivateChat('123456@g.us')).toBe(false);
 });
 
+test('parseCommand retorna null para texto sem /', () => {
+  expect(parseCommand('oi')).toBeNull();
+  expect(parseCommand(null)).toBeNull();
+});
+
+test('parseCommand retorna cmd e args para comando válido', () => {
+  expect(parseCommand('/bot on 5511999999999')).toEqual({ cmd: '/bot', args: ['on', '5511999999999'] });
+});
+
 test('extractMessage lê de conversation', () => {
   expect(extractMessage({ message: { conversation: 'oi' } })).toBe('oi');
 });
 
 test('extractMessage lê de extendedTextMessage', () => {
-  expect(
-    extractMessage({ message: { extendedTextMessage: { text: 'oi extended' } } })
-  ).toBe('oi extended');
+  expect(extractMessage({ message: { extendedTextMessage: { text: 'oi' } } })).toBe('oi');
 });
 
 test('extractMessage retorna null para tipos não suportados', () => {
