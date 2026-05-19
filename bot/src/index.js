@@ -5,6 +5,7 @@ const { registerWebhook } = require('./evolutionApi');
 const { handlePaymentWebhook } = require('./payment');
 const { sendNotification } = require('./notify');
 const { rescheduleAllReminders } = require('./scheduling');
+const { sendBroadcast, loadContacts } = require('./broadcast');
 
 const app = express();
 app.use(express.json());
@@ -29,6 +30,26 @@ app.post('/notify', async (req, res) => {
     console.error('Erro ao enviar notificação:', err.message);
     res.status(500).json({ error: 'Failed to send notification' });
   }
+});
+
+app.post('/broadcast', async (req, res) => {
+  const token = req.headers['x-api-key'];
+  if (token !== process.env.WEBHOOK_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'message is required' });
+  }
+  const contacts = loadContacts();
+  res.json({ queued: contacts.length });
+  (async () => {
+    try {
+      await sendBroadcast(message);
+    } catch (err) {
+      console.error('Erro no broadcast via HTTP:', err.message);
+    }
+  })();
 });
 
 app.post('/payment/webhook', async (req, res) => {
