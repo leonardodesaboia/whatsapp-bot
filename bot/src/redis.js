@@ -4,8 +4,9 @@ let _client;
 
 async function getClient() {
   if (!_client) {
-    _client = createClient({ url: process.env.REDIS_URL || 'redis://redis:6379' });
-    await _client.connect();
+    const c = createClient({ url: process.env.REDIS_URL || 'redis://redis:6379' });
+    await c.connect();
+    _client = c;
   }
   return _client;
 }
@@ -18,7 +19,7 @@ async function getHistory(phone) {
 
 async function appendHistory(phone, userMessage, assistantMessage) {
   const client = await getClient();
-  const maxHistory = parseInt(process.env.MAX_HISTORY || '10');
+  const maxHistory = parseInt(process.env.MAX_HISTORY || '10', 10);
   const history = await getHistory(phone);
   history.push({ role: 'user', content: userMessage });
   history.push({ role: 'assistant', content: assistantMessage });
