@@ -2,12 +2,32 @@ require('dotenv').config();
 const express = require('express');
 const { handleWebhook } = require('./webhook');
 const { registerWebhook } = require('./evolutionApi');
+const { sendNotification } = require('./notify');
 
 const app = express();
 app.use(express.json());
 
 app.post('/webhook', handleWebhook);
+
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+app.post('/notify', async (req, res) => {
+  const token = req.headers['x-api-key'];
+  if (token !== process.env.WEBHOOK_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const { phone, message } = req.body;
+  if (!phone || !message) {
+    return res.status(400).json({ error: 'phone and message are required' });
+  }
+  try {
+    await sendNotification(phone, message);
+    res.json({ sent: true });
+  } catch (err) {
+    console.error('Erro ao enviar notificação:', err.message);
+    res.status(500).json({ error: 'Failed to send notification' });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 
