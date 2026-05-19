@@ -2,7 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const { handleWebhook } = require('./webhook');
 const { registerWebhook } = require('./evolutionApi');
+const { handlePaymentWebhook } = require('./payment');
 const { sendNotification } = require('./notify');
+const { rescheduleAllReminders } = require('./scheduling');
 
 const app = express();
 app.use(express.json());
@@ -29,10 +31,29 @@ app.post('/notify', async (req, res) => {
   }
 });
 
+app.post('/payment/webhook', async (req, res) => {
+  try {
+    const status = req.query['data.status'] || req.body?.status;
+    await handlePaymentWebhook(req.body, status);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('Erro ao processar webhook de pagamento:', err.message);
+    res.sendStatus(500);
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, async () => {
   console.log(`Bot rodando na porta ${PORT}`);
+
+  try {
+    await rescheduleAllReminders();
+    console.log('Lembretes pendentes reagendados.');
+  } catch (err) {
+    console.warn('Aviso: não foi possível reagendar lembretes.', err.message);
+  }
+
   const botUrl = process.env.BOT_WEBHOOK_URL || `http://bot:${PORT}`;
   try {
     await registerWebhook(botUrl);
