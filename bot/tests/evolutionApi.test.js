@@ -8,7 +8,7 @@ process.env.EVOLUTION_API_KEY = 'test-api-key';
 process.env.EVOLUTION_INSTANCE = 'test-instance';
 process.env.WEBHOOK_TOKEN = 'test-webhook-token';
 
-const { sendText, registerWebhook, sendList } = require('../src/evolutionApi');
+const { sendText, registerWebhook, sendList, sendImageBase64 } = require('../src/evolutionApi');
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -46,6 +46,22 @@ test('sendList envia POST para o endpoint correto', async () => {
   expect(mockPost).toHaveBeenCalledWith(
     'http://evolution:8080/message/sendList/test-instance',
     { number: '5511999999999', ...listMessage },
+    { headers: { apikey: 'test-api-key' } }
+  );
+});
+
+test('sendImageBase64 envia POST com base64 e caption', async () => {
+  mockPost.mockResolvedValue({ data: {} });
+  await sendImageBase64('5511999999999', 'abc123', 'QR Code');
+  expect(mockPost).toHaveBeenCalledWith(
+    'http://evolution:8080/message/sendMedia/test-instance',
+    {
+      number: '5511999999999',
+      mediatype: 'image',
+      mimetype: 'image/png',
+      media: 'abc123',
+      caption: 'QR Code',
+    },
     { headers: { apikey: 'test-api-key' } }
   );
 });

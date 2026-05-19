@@ -36,4 +36,18 @@ async function sendList(to, listMessage) {
   );
 }
 
-module.exports = { sendText, registerWebhook, sendList };
+async function sendImageBase64(to, base64, caption) {
+  await axios.post(
+    `${BASE_URL}/message/sendMedia/${INSTANCE}`,
+    {
+      number: to,
+      mediatype: 'image',
+      mimetype: 'image/png',
+      media: base64,
+      caption: caption || '',
+    },
+    { headers: { apikey: API_KEY } }
+  );
+}
+
+module.exports = { sendText, registerWebhook, sendList, sendImageBase64 };
