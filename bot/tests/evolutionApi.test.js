@@ -8,7 +8,7 @@ process.env.EVOLUTION_API_KEY = 'test-api-key';
 process.env.EVOLUTION_INSTANCE = 'test-instance';
 process.env.WEBHOOK_TOKEN = 'test-webhook-token';
 
-const { sendText, registerWebhook, sendList, sendImageBase64 } = require('../src/evolutionApi');
+const { sendText, registerWebhook, sendList, sendImageBase64, getMediaBase64 } = require('../src/evolutionApi');
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -62,6 +62,18 @@ test('sendImageBase64 envia POST com base64 e caption', async () => {
       media: 'abc123',
       caption: 'QR Code',
     },
+    { headers: { apikey: 'test-api-key' } }
+  );
+});
+
+test('getMediaBase64 envia POST e retorna base64', async () => {
+  mockPost.mockResolvedValue({ data: { base64: 'abc123base64' } });
+  const messageData = { key: { id: 'msg-1' }, message: { audioMessage: {} } };
+  const result = await getMediaBase64(messageData);
+  expect(result).toBe('abc123base64');
+  expect(mockPost).toHaveBeenCalledWith(
+    'http://evolution:8080/chat/getBase64FromMediaMessage/test-instance',
+    { message: messageData },
     { headers: { apikey: 'test-api-key' } }
   );
 });

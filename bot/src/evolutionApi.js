@@ -50,4 +50,13 @@ async function sendImageBase64(to, base64, caption) {
   );
 }
 
-module.exports = { sendText, registerWebhook, sendList, sendImageBase64 };
+async function getMediaBase64(messageData) {
+  const response = await axios.post(
+    `${BASE_URL}/chat/getBase64FromMediaMessage/${INSTANCE}`,
+    { message: messageData },
+    { headers: { apikey: API_KEY } }
+  );
+  return response.data.base64;
+}
+
+module.exports = { sendText, registerWebhook, sendList, sendImageBase64, getMediaBase64 };
