@@ -576,7 +576,7 @@ git commit -m "feat: add notify module for proactive notifications"
 
 ---
 
-## Task 6: `catalog.js` — catálogo interativo (TDD)
+## ✅ Task 6: `catalog.js` — catálogo interativo (TDD)
 
 **Files:**
 - Create: `bot/src/catalog.js`
