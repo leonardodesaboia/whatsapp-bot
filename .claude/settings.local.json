@@ -9,7 +9,12 @@
       "Skill(code-review:code-review)",
       "Bash(node -e ' *)",
       "Bash(npm test *)",
-      "Bash(node -e \"const m = require\\('./src/state'\\); console.log\\('Exports:', Object.keys\\(m\\)\\)\")"
+      "Bash(node -e \"const m = require\\('./src/state'\\); console.log\\('Exports:', Object.keys\\(m\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(npm audit *)",
+      "Bash(git *)",
+      "Bash(node *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")"
     ]
   }
 }
