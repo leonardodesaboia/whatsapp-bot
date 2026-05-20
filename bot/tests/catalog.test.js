@@ -2,6 +2,7 @@ const mockSendText = jest.fn();
 const mockSendList = jest.fn();
 const mockSetState = jest.fn();
 const mockClearState = jest.fn();
+const mockGetCatalogCategories = jest.fn();
 
 jest.mock('../src/evolutionApi', () => ({
   sendText: mockSendText,
@@ -17,21 +18,26 @@ jest.mock('../src/state', () => ({
   isHumanMode: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(() =>
-    JSON.stringify({
-      categories: [
-        {
-          id: 'services',
-          title: 'Serviços',
-          items: [
-            { id: 'basic', title: 'Serviço Básico', description: 'Desc', price: 50.00, duration: 60 },
-          ],
-        },
-      ],
-    })
-  ),
+jest.mock('../src/config', () => ({
+  getCatalogCategories: mockGetCatalogCategories,
 }));
+
+const MOCK_CATEGORIES = [
+  {
+    id: 1,
+    slug: 'services',
+    title: 'Serviços',
+    position: 0,
+    items: [
+      { id: 10, category_id: 1, slug: 'basic', title: 'Serviço Básico', description: 'Desc', price: '50.00', duration: 60, position: 0 },
+    ],
+  },
+];
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockGetCatalogCategories.mockResolvedValue(MOCK_CATEGORIES);
+});
 
 const {
   getCategories,
@@ -42,38 +48,37 @@ const {
   handleCatalogFlow,
 } = require('../src/catalog');
 
-beforeEach(() => jest.clearAllMocks());
-
-test('getCategories retorna todas as categorias', () => {
-  expect(getCategories()).toHaveLength(1);
-  expect(getCategories()[0].id).toBe('services');
+test('getCategories retorna todas as categorias', async () => {
+  const cats = await getCategories();
+  expect(cats).toHaveLength(1);
+  expect(cats[0].slug).toBe('services');
 });
 
-test('getCategory retorna categoria por id', () => {
-  expect(getCategory('services').title).toBe('Serviços');
-  expect(getCategory('nope')).toBeNull();
+test('getCategory retorna categoria por slug', async () => {
+  expect((await getCategory('services')).title).toBe('Serviços');
+  expect(await getCategory('nope')).toBeNull();
 });
 
-test('getItem retorna item por categoryId e itemId', () => {
-  expect(getItem('services', 'basic').title).toBe('Serviço Básico');
-  expect(getItem('services', 'nope')).toBeNull();
-  expect(getItem('nope', 'basic')).toBeNull();
+test('getItem retorna item por categorySlug e itemSlug', async () => {
+  expect((await getItem('services', 'basic')).title).toBe('Serviço Básico');
+  expect(await getItem('services', 'nope')).toBeNull();
+  expect(await getItem('nope', 'basic')).toBeNull();
 });
 
-test('buildCategoryListMessage retorna estrutura de list message', () => {
-  const msg = buildCategoryListMessage();
+test('buildCategoryListMessage retorna estrutura de list message com slug como rowId', async () => {
+  const msg = await buildCategoryListMessage();
   expect(msg.sections[0].rows[0].rowId).toBe('services');
   expect(msg.sections[0].rows[0].title).toBe('Serviços');
 });
 
-test('buildItemListMessage retorna itens da categoria', () => {
-  const msg = buildItemListMessage('services');
+test('buildItemListMessage retorna itens da categoria com rowId "catSlug:itemSlug"', async () => {
+  const msg = await buildItemListMessage('services');
   expect(msg.sections[0].rows[0].rowId).toBe('services:basic');
   expect(msg.sections[0].rows[0].title).toBe('Serviço Básico');
 });
 
-test('buildItemListMessage retorna null para categoria inválida', () => {
-  expect(buildItemListMessage('nope')).toBeNull();
+test('buildItemListMessage retorna null para categoria inválida', async () => {
+  expect(await buildItemListMessage('nope')).toBeNull();
 });
 
 test('handleCatalogFlow step 0 envia list message de categorias', async () => {
@@ -110,16 +115,9 @@ test('handleCatalogFlow step 3 mantém fluxo em resposta inválida', async () =>
   mockSendText.mockResolvedValue(undefined);
   await handleCatalogFlow(
     '5511999999999',
-    {
-      flow: 'catalog',
-      step: 3,
-      data: { item: { title: 'Serviço Básico', price: 50, duration: 60 } },
-    },
+    { flow: 'catalog', step: 3, data: { item: { title: 'Serviço Básico', price: '50.00', duration: 60 } } },
     'talvez'
   );
   expect(mockClearState).not.toHaveBeenCalled();
-  expect(mockSendText).toHaveBeenCalledWith(
-    '5511999999999',
-    expect.stringContaining('Resposta inválida')
-  );
+  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('Resposta inválida'));
 });

@@ -1,35 +1,31 @@
-const fs = require('fs');
-const path = require('path');
-
-const catalog = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '../catalog.json'), 'utf8')
-);
-
+const { getCatalogCategories } = require('./config');
 const { sendText, sendList } = require('./evolutionApi');
 const { setState, clearState } = require('./state');
 
-function getCategories() {
-  return catalog.categories;
+async function getCategories() {
+  return getCatalogCategories();
 }
 
-function getCategory(id) {
-  return catalog.categories.find((c) => c.id === id) || null;
+async function getCategory(slug) {
+  const categories = await getCatalogCategories();
+  return categories.find((c) => c.slug === slug) || null;
 }
 
-function getItem(categoryId, itemId) {
-  const cat = getCategory(categoryId);
-  return cat ? cat.items.find((i) => i.id === itemId) || null : null;
+async function getItem(categorySlug, itemSlug) {
+  const cat = await getCategory(categorySlug);
+  return cat ? cat.items.find((i) => i.slug === itemSlug) || null : null;
 }
 
-function buildCategoryListMessage() {
+async function buildCategoryListMessage() {
+  const categories = await getCatalogCategories();
   return {
     title: 'O que você procura?',
     buttonText: 'Ver opções',
     sections: [
       {
         title: 'Categorias',
-        rows: catalog.categories.map((c) => ({
-          rowId: c.id,
+        rows: categories.map((c) => ({
+          rowId: c.slug,
           title: c.title,
           description: `${c.items.length} opção(ões) disponível(eis)`,
         })),
@@ -38,8 +34,8 @@ function buildCategoryListMessage() {
   };
 }
 
-function buildItemListMessage(categoryId) {
-  const category = getCategory(categoryId);
+async function buildItemListMessage(categorySlug) {
+  const category = await getCategory(categorySlug);
   if (!category) return null;
   return {
     title: category.title,
@@ -48,9 +44,9 @@ function buildItemListMessage(categoryId) {
       {
         title: category.title,
         rows: category.items.map((i) => ({
-          rowId: `${categoryId}:${i.id}`,
+          rowId: `${categorySlug}:${i.slug}`,
           title: i.title,
-          description: `R$ ${i.price.toFixed(2)}${i.duration ? ` • ${i.duration} min` : ''}`,
+          description: `R$ ${parseFloat(i.price).toFixed(2)}${i.duration ? ` • ${i.duration} min` : ''}`,
         })),
       },
     ],
@@ -66,32 +62,33 @@ async function handleCatalogFlow(phone, state, text) {
 
   if (state.step === 0) {
     await setState(phone, { flow: 'catalog', step: 1, data: {} });
-    await sendList(phone, buildCategoryListMessage());
+    await sendList(phone, await buildCategoryListMessage());
     return;
   }
 
   if (state.step === 1) {
-    const category = getCategory(text);
+    const category = await getCategory(text);
     if (!category) {
       await sendText(phone, 'Categoria não encontrada. Escolha uma opção válida ou digite "cancelar".');
       return;
     }
     await setState(phone, { flow: 'catalog', step: 2, data: { categoryId: text } });
-    await sendList(phone, buildItemListMessage(text));
+    await sendList(phone, await buildItemListMessage(text));
     return;
   }
 
   if (state.step === 2) {
-    const [categoryId, itemId] = (text || '').split(':');
-    const item = getItem(categoryId, itemId);
+    const [categorySlug, itemSlug] = (text || '').split(':');
+    const item = await getItem(categorySlug, itemSlug);
     if (!item) {
       await sendText(phone, 'Item não encontrado. Escolha uma opção válida ou digite "cancelar".');
       return;
     }
-    await setState(phone, { flow: 'catalog', step: 3, data: { categoryId, itemId, item } });
+    const price = parseFloat(item.price);
+    await setState(phone, { flow: 'catalog', step: 3, data: { categoryId: categorySlug, itemId: itemSlug, item: { ...item, price } } });
     await sendText(
       phone,
-      `*${item.title}*\n${item.description}\nPreço: R$ ${item.price.toFixed(2)}${item.duration ? `\nDuração: ${item.duration} min` : ''}\n\nDigite:\n• "agendar" para marcar um horário\n• "pagar" para gerar Pix\n• "cancelar" para voltar`
+      `*${item.title}*\n${item.description}\nPreço: R$ ${price.toFixed(2)}${item.duration ? `\nDuração: ${item.duration} min` : ''}\n\nDigite:\n• "agendar" para marcar um horário\n• "pagar" para gerar Pix\n• "cancelar" para voltar`
     );
     return;
   }
