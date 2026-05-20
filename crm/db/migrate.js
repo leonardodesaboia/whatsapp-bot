@@ -78,7 +78,8 @@ async function migrate() {
         faq JSONB NOT NULL DEFAULT '[]',
         timezone VARCHAR(100) NOT NULL DEFAULT 'America/Sao_Paulo',
         business_hours JSONB DEFAULT NULL,
-        closed_message TEXT DEFAULT ''
+        closed_message TEXT DEFAULT '',
+        CONSTRAINT only_one_row CHECK (id = 1)
       );
 
       CREATE TABLE IF NOT EXISTS catalog_categories (
