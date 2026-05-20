@@ -68,6 +68,44 @@ async function migrate() {
         name VARCHAR(255),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS company_settings (
+        id SERIAL PRIMARY KEY,
+        nome VARCHAR(255) NOT NULL DEFAULT '',
+        descricao TEXT DEFAULT '',
+        horario VARCHAR(255) DEFAULT '',
+        contato VARCHAR(255) DEFAULT '',
+        faq JSONB NOT NULL DEFAULT '[]',
+        timezone VARCHAR(100) NOT NULL DEFAULT 'America/Sao_Paulo',
+        business_hours JSONB DEFAULT NULL,
+        closed_message TEXT DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS catalog_categories (
+        id SERIAL PRIMARY KEY,
+        slug VARCHAR(100) UNIQUE NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE TABLE IF NOT EXISTS catalog_items (
+        id SERIAL PRIMARY KEY,
+        category_id INTEGER REFERENCES catalog_categories(id) ON DELETE CASCADE,
+        slug VARCHAR(100) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        description TEXT DEFAULT '',
+        price DECIMAL(10,2) NOT NULL,
+        duration INTEGER,
+        position INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(category_id, slug)
+      );
+
+      CREATE TABLE IF NOT EXISTS contacts (
+        id SERIAL PRIMARY KEY,
+        phone VARCHAR(20) UNIQUE NOT NULL,
+        name VARCHAR(255),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
     `);
   } finally {
     await pool.end();
