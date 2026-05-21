@@ -107,6 +107,35 @@ async function migrate() {
         name VARCHAR(255),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS remarketing_campaigns (
+        id           SERIAL PRIMARY KEY,
+        name         VARCHAR(255) NOT NULL,
+        active       BOOLEAN NOT NULL DEFAULT true,
+        trigger_days INTEGER NOT NULL DEFAULT 3,
+        stage_filter INTEGER REFERENCES stages(id) ON DELETE SET NULL,
+        created_at   TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS remarketing_steps (
+        id          SERIAL PRIMARY KEY,
+        campaign_id INTEGER NOT NULL REFERENCES remarketing_campaigns(id) ON DELETE CASCADE,
+        position    INTEGER NOT NULL DEFAULT 0,
+        delay_days  INTEGER NOT NULL DEFAULT 1,
+        message     TEXT NOT NULL,
+        UNIQUE(campaign_id, position)
+      );
+
+      CREATE TABLE IF NOT EXISTS remarketing_enrollments (
+        id           SERIAL PRIMARY KEY,
+        campaign_id  INTEGER NOT NULL REFERENCES remarketing_campaigns(id) ON DELETE CASCADE,
+        lead_id      INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
+        enrolled_at  TIMESTAMPTZ DEFAULT NOW(),
+        last_sent_at TIMESTAMPTZ,
+        current_step INTEGER NOT NULL DEFAULT 0,
+        completed_at TIMESTAMPTZ,
+        cancelled_at TIMESTAMPTZ
+      );
     `);
   } finally {
     await pool.end();
