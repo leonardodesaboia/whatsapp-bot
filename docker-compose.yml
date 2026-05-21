@@ -87,6 +87,8 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN}
+      BOT_INTERNAL_URL: http://bot:3000
     depends_on:
       postgres:
         condition: service_healthy
