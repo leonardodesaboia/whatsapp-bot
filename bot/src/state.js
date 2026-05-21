@@ -20,8 +20,8 @@ async function clearState(phone) {
   await client.del(`state:${phone}`);
 }
 
-async function setHumanMode(phone) {
-  const mins = parseInt(process.env.HUMAN_TAKEOVER_TIMEOUT_MINUTES || '30', 10);
+async function setHumanMode(phone, minutes) {
+  const mins = minutes ?? parseInt(process.env.HUMAN_TAKEOVER_TIMEOUT_MINUTES || '30', 10);
   await setState(phone, { mode: 'human', flow: null, step: 0, data: {} }, mins * 60);
 }
 

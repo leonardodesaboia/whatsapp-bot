@@ -23,6 +23,33 @@ export default function ContactsSettings({
   const [filterStage, setFilterStage] = useState<number | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [importing, setImporting] = useState(false);
+  const [broadcastMsg, setBroadcastMsg] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<string | null>(null);
+
+  const sendBroadcast = async () => {
+    if (!broadcastMsg.trim() || contacts.length === 0) return;
+    if (!window.confirm(`Enviar para ${contacts.length} contato(s)?`)) return;
+    setSending(true);
+    setSendResult(null);
+    try {
+      const res = await fetch('/api/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: broadcastMsg.trim() }),
+      });
+      if (res.ok) {
+        setSendResult('Broadcast enviado!');
+        setBroadcastMsg('');
+      } else {
+        setSendResult('Erro ao enviar. Verifique se o bot está online.');
+      }
+    } catch {
+      setSendResult('Erro ao conectar com o bot.');
+    }
+    setSending(false);
+    setTimeout(() => setSendResult(null), 4000);
+  };
 
   const addContact = async () => {
     if (!newPhone.trim()) return;
@@ -80,7 +107,33 @@ export default function ContactsSettings({
   const inputClass = 'rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100';
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Enviar broadcast */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium text-slate-700">Enviar mensagem em massa</p>
+          <span className="text-xs text-slate-400">{contacts.length} contato(s)</span>
+        </div>
+        <textarea
+          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-100"
+          rows={3}
+          placeholder="Digite a mensagem..."
+          value={broadcastMsg}
+          onChange={(e) => setBroadcastMsg(e.target.value)}
+        />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => void sendBroadcast()}
+            disabled={sending || !broadcastMsg.trim() || contacts.length === 0}
+            className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-40"
+          >
+            {sending ? 'Enviando…' : 'Enviar para todos'}
+          </button>
+          {sendResult && <span className={`text-xs ${sendResult.startsWith('Erro') ? 'text-rose-500' : 'text-emerald-600'}`}>{sendResult}</span>}
+        </div>
+      </div>
+
+      <div className="space-y-4">
       {/* Adicionar avulso */}
       <div className="flex gap-2">
         <input className={`${inputClass} flex-1`} placeholder="Telefone (ex: 5511999999999)" value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
@@ -128,6 +181,7 @@ export default function ContactsSettings({
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
