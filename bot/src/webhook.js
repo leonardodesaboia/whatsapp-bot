@@ -22,7 +22,11 @@ function isPrivateChat(remoteJid) {
 function extractMessage(data) {
   const msg = data?.message;
   if (!msg) return null;
-  return msg.conversation || msg.extendedTextMessage?.text || null;
+  return msg.conversation
+    || msg.extendedTextMessage?.text
+    || msg.listResponseMessage?.singleSelectReply?.selectedRowId
+    || (msg.listMessage ? `[lista: ${msg.listMessage.title || 'menu'}]` : null)
+    || null;
 }
 
 function parseCommand(text) {
@@ -62,8 +66,15 @@ async function handleCommand(parsed, res) {
   return res.sendStatus(200);
 }
 
+const FLOW_ESCAPE = /^(oi|olá|ola|oii|oiii|bom dia|boa tarde|boa noite|menu|início|inicio|começo|comeco|ajuda|help|voltar|sair|exit|tudo bem|tudo bom|ei|hey|hello)[\s!?.]*$/i;
+
 async function processMessage(phone, text) {
   const state = await getState(phone);
+
+  if (state.flow && FLOW_ESCAPE.test(text?.trim())) {
+    await clearState(phone);
+    state.flow = null;
+  }
 
   if (state.flow === 'catalog') {
     await handleCatalogFlow(phone, state, text);
@@ -124,11 +135,16 @@ async function handleWebhook(req, res) {
     const text = extractMessage(data);
     const command = parseCommand(text);
     if (command) return handleCommand(command, res);
-    // source 'android'/'ios'/'web' = operador digitando manualmente; 'api' = bot enviando
-    if (isPrivateChat(data.key.remoteJid) && data.source && data.source !== 'api') {
+    if (isPrivateChat(data.key.remoteJid)) {
       const phone = data.key.remoteJid.replace('@s.whatsapp.net', '');
-      const pauseMins = parseInt(process.env.HUMAN_REPLY_PAUSE_MINUTES || '10', 10);
-      void setHumanMode(phone, pauseMins);
+      if (data.source && data.source !== 'api') {
+        // operador digitando manualmente → pausa o bot
+        const pauseMins = parseInt(process.env.HUMAN_REPLY_PAUSE_MINUTES || '10', 10);
+        void setHumanMode(phone, pauseMins);
+      } else if (data.source === 'api' && text) {
+        // bot enviou uma mensagem → registra no histórico de interações
+        void addInteraction(phone, text, 'out', 'text');
+      }
     }
     return res.sendStatus(200);
   }

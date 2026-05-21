@@ -288,6 +288,16 @@ test('extractMessage retorna null para tipos não suportados', () => {
   expect(extractMessage({ message: { imageMessage: {} } })).toBeNull();
 });
 
+test('extractMessage lê selectedRowId de listResponseMessage', () => {
+  const data = { message: { listResponseMessage: { singleSelectReply: { selectedRowId: 'services' } } } };
+  expect(extractMessage(data)).toBe('services');
+});
+
+test('extractMessage lê título de listMessage (bot enviando lista)', () => {
+  const data = { message: { listMessage: { title: 'O que você procura?' } } };
+  expect(extractMessage(data)).toBe('[lista: O que você procura?]');
+});
+
 test('roteia para handleSchedulingFlow quando flow=scheduling', async () => {
   getState.mockResolvedValue({ mode: 'bot', flow: 'scheduling', step: 1, data: {} });
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
