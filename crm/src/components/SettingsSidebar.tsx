@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Building2, Clock, HelpCircle, Kanban, Package, Megaphone } from 'lucide-react';
+import { Building2, Clock, HelpCircle, Kanban, Package, Megaphone, Repeat2 } from 'lucide-react';
 
 const GROUPS = [
   {
@@ -24,6 +24,7 @@ const GROUPS = [
     label: 'Marketing',
     items: [
       { href: '/settings/contatos', icon: Megaphone, label: 'Broadcast' },
+      { href: '/settings/remarketing', icon: Repeat2, label: 'Remarketing' },
     ],
   },
 ];

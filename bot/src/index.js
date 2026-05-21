@@ -9,7 +9,8 @@ const {
 } = require('./payment');
 const { sendNotification } = require('./notify');
 const { rescheduleAllReminders } = require('./scheduling');
-const { sendBroadcast, loadContacts } = require('./broadcast');
+const { sendBroadcast } = require('./broadcast');
+const { rescheduleRemarketing } = require('./remarketing');
 
 const app = express();
 app.use(express.json());
@@ -46,8 +47,7 @@ app.post('/broadcast', async (req, res) => {
   if (!message) {
     return res.status(400).json({ error: 'message is required' });
   }
-  const contacts = loadContacts();
-  res.json({ queued: contacts.length });
+  res.json({ queued: true });
   (async () => {
     try {
       await sendBroadcast(message);
@@ -110,6 +110,13 @@ app.listen(PORT, async () => {
     console.log('Lembretes pendentes reagendados.');
   } catch (err) {
     console.warn('Aviso: não foi possível reagendar lembretes.', err.message);
+  }
+
+  try {
+    await rescheduleRemarketing();
+    console.log('Remarketing inicializado.');
+  } catch (err) {
+    console.warn('Aviso: não foi possível inicializar remarketing.', err.message);
   }
 
   const botUrl = process.env.BOT_WEBHOOK_URL || `http://bot:${PORT}`;

@@ -11,6 +11,7 @@ const { transcribeAudio } = require('./audio');
 const { handleImageMessage } = require('./image');
 const { sendBroadcast } = require('./broadcast');
 const { upsertLead, addInteraction } = require('./crm');
+const { cancelEnrollment } = require('./remarketing');
 
 const STARTUP_TIMESTAMP = process.env.NODE_ENV === 'production' ? 0 : Math.floor(Date.now() / 1000);
 
@@ -142,6 +143,8 @@ async function handleWebhook(req, res) {
   const messageType = hasImage ? 'image' : hasAudio ? 'audio' : 'text';
   const incomingContent = text || (hasAudio ? '[áudio]' : '[imagem]');
   const pushName = data.pushName || null;
+
+  void cancelEnrollment(phone);
 
   if (await isHumanMode(phone)) return res.sendStatus(200);
 
