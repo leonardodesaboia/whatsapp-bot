@@ -35,14 +35,17 @@ function formatTime(date) {
   });
 }
 
+const DEFAULT_DAY_SCHEDULE = { open: '08:00', close: '18:00' };
+
 async function getAvailableSlots(date, durationMinutes) {
   const company = await getCompanySettings();
   const timezone = company?.timezone || 'America/Sao_Paulo';
-  const schedule = company?.business_hours || {};
+  const businessHours = company?.business_hours; // null = 24h
 
   const localDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
   const dayKey = DAY_MAP[localDate.getDay()];
-  const daySchedule = schedule[dayKey];
+  // null = 24h mode → use default hours; structured = use configured hours (null day = closed)
+  const daySchedule = businessHours === null ? DEFAULT_DAY_SCHEDULE : (businessHours?.[dayKey] ?? null);
   if (!daySchedule) return [];
 
   const auth = await getAuth();
