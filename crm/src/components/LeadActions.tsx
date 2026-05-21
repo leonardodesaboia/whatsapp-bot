@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Send, BotOff, BotMessageSquare } from 'lucide-react';
+import { Send, BotOff, BotMessageSquare, PauseCircle } from 'lucide-react';
 
 export default function LeadActions({ phone }: { phone: string }) {
   const [notifyMsg, setNotifyMsg] = useState('');
   const [sendingNotify, setSendingNotify] = useState(false);
   const [notifyResult, setNotifyResult] = useState<string | null>(null);
   const [activatingBot, setActivatingBot] = useState(false);
+  const [pausingBot, setPausingBot] = useState(false);
   const [botResult, setBotResult] = useState<string | null>(null);
 
   const showResult = (setter: (v: string | null) => void, msg: string) => {
@@ -30,6 +31,21 @@ export default function LeadActions({ phone }: { phone: string }) {
       showResult(setNotifyResult, 'Erro ao conectar com o bot.');
     }
     setSendingNotify(false);
+  };
+
+  const pauseBot = async () => {
+    setPausingBot(true);
+    try {
+      const res = await fetch('/api/bot-pause', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      showResult(setBotResult, res.ok ? 'Bot pausado por 10 min.' : 'Erro ao pausar.');
+    } catch {
+      showResult(setBotResult, 'Erro ao conectar com o bot.');
+    }
+    setPausingBot(false);
   };
 
   const activateBot = async () => {
@@ -76,13 +92,13 @@ export default function LeadActions({ phone }: { phone: string }) {
         )}
       </div>
 
-      {/* Reativar bot */}
+      {/* Controle do bot */}
       <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
         <div className="flex items-center gap-2">
           <BotOff size={14} strokeWidth={2} className="text-slate-400" />
           <div>
-            <p className="text-sm font-medium text-slate-700">Reativar bot</p>
-            <p className="text-xs text-slate-400">Encerra pausa e bot volta a responder</p>
+            <p className="text-sm font-medium text-slate-700">Controle do bot</p>
+            <p className="text-xs text-slate-400">Pause antes de responder manualmente</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -91,6 +107,14 @@ export default function LeadActions({ phone }: { phone: string }) {
               {botResult}
             </span>
           )}
+          <button
+            onClick={() => void pauseBot()}
+            disabled={pausingBot}
+            className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-700 transition hover:bg-amber-100 disabled:opacity-40"
+          >
+            <PauseCircle size={13} strokeWidth={2} />
+            {pausingBot ? 'Pausando…' : 'Pausar'}
+          </button>
           <button
             onClick={() => void activateBot()}
             disabled={activatingBot}

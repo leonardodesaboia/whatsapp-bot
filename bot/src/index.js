@@ -39,6 +39,20 @@ app.post('/notify', async (req, res) => {
   }
 });
 
+app.post('/bot-pause', async (req, res) => {
+  const token = req.headers['x-api-key'];
+  if (token !== process.env.WEBHOOK_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const { phone } = req.body;
+  if (!phone) {
+    return res.status(400).json({ error: 'phone is required' });
+  }
+  const mins = parseInt(process.env.HUMAN_REPLY_PAUSE_MINUTES || '10', 10);
+  await setHumanMode(phone, mins);
+  res.json({ ok: true, pausedFor: mins });
+});
+
 app.post('/bot-on', async (req, res) => {
   const token = req.headers['x-api-key'];
   if (token !== process.env.WEBHOOK_TOKEN) {
