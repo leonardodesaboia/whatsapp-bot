@@ -61,14 +61,12 @@ services:
     env_file:
       - .env
     environment:
+      - NODE_ENV=production
       - EVOLUTION_API_URL=http://evolution-api:8080
       - REDIS_URL=redis://redis:6379
       - BOT_WEBHOOK_URL=${BOT_WEBHOOK_URL:-http://bot:3000}
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/crm
     volumes:
-      - ./company.json:/app/company.json:ro
-      - ./catalog.json:/app/catalog.json:ro
-      - ./contacts.json:/app/contacts.json:ro
       - ./google-credentials.json:/app/google-credentials.json:ro
     depends_on:
       evolution-api:

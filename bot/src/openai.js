@@ -46,13 +46,17 @@ async function chat(history, userMessage) {
 }
 
 async function chatWithImage(base64, caption) {
+  const userText = caption
+    ? caption
+    : 'O cliente enviou uma imagem. Responda de forma natural e amigável, como um atendente humano faria — sem descrever a imagem formalmente. Se for relevante para a empresa, comente de forma breve e direcione o cliente; se não for, responda com simpatia e pergunte como pode ajudar.';
+
   const messages = [
     { role: 'system', content: await buildSystemPrompt() },
     {
       role: 'user',
       content: [
         { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${base64}` } },
-        { type: 'text', text: caption || 'O que você vê nesta imagem? Responda no contexto da empresa.' },
+        { type: 'text', text: userText },
       ],
     },
   ];

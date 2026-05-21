@@ -86,16 +86,19 @@ async function handleCatalogFlow(phone, state, text) {
     }
     const price = parseFloat(item.price);
     await setState(phone, { flow: 'catalog', step: 3, data: { categoryId: categorySlug, itemId: itemSlug, item: { ...item, price } } });
+    const actions = item.duration
+      ? '• "agendar" para marcar um horário\n• "pagar" para gerar Pix'
+      : '• "pagar" para gerar Pix';
     await sendText(
       phone,
-      `*${item.title}*\n${item.description}\nPreço: R$ ${price.toFixed(2)}${item.duration ? `\nDuração: ${item.duration} min` : ''}\n\nDigite:\n• "agendar" para marcar um horário\n• "pagar" para gerar Pix\n• "cancelar" para voltar`
+      `*${item.title}*\n${item.description}\nPreço: R$ ${price.toFixed(2)}${item.duration ? `\nDuração: ${item.duration} min` : ''}\n\nDigite:\n${actions}\n• "cancelar" para voltar`
     );
     return;
   }
 
   if (state.step === 3) {
     const { item } = state.data;
-    if (text?.toLowerCase() === 'agendar') {
+    if (text?.toLowerCase() === 'agendar' && item.duration) {
       const newState = { flow: 'scheduling', step: 0, data: { service: item.title, duration: item.duration, price: item.price } };
       await setState(phone, newState);
       const { handleSchedulingFlow } = require('./scheduling');
@@ -106,7 +109,8 @@ async function handleCatalogFlow(phone, state, text) {
       const { handlePaymentFlow } = require('./payment');
       await handlePaymentFlow(phone, newState, text);
     } else {
-      await sendText(phone, 'Resposta inválida. Digite "agendar", "pagar" ou "cancelar".');
+      const hint = item.duration ? '"agendar", "pagar"' : '"pagar"';
+      await sendText(phone, `Resposta inválida. Digite ${hint} ou "cancelar".`);
     }
   }
 }

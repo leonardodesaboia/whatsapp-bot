@@ -90,6 +90,17 @@ test('chatWithImage envia imagem base64 para GPT-4o e retorna resposta', async (
   );
 });
 
+test('chatWithImage usa prompt humanizado quando não há caption', async () => {
+  mockCreate.mockResolvedValue({
+    choices: [{ message: { content: 'Olá! Como posso ajudar?' } }],
+  });
+  await chatWithImage('base64data', '');
+  const call = mockCreate.mock.calls[0][0];
+  const userContent = call.messages[1].content;
+  const textPart = userContent.find((c) => c.type === 'text');
+  expect(textPart.text).toContain('atendente humano');
+});
+
 test('chatWithImage retorna fallback quando OpenAI não retorna choices', async () => {
   mockCreate.mockResolvedValue({ choices: [] });
   const result = await chatWithImage('base64data', '');

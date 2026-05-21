@@ -12,6 +12,8 @@ const { handleImageMessage } = require('./image');
 const { sendBroadcast } = require('./broadcast');
 const { upsertLead, addInteraction } = require('./crm');
 
+const STARTUP_TIMESTAMP = process.env.NODE_ENV === 'production' ? 0 : Math.floor(Date.now() / 1000);
+
 function isPrivateChat(remoteJid) {
   return typeof remoteJid === 'string' && remoteJid.endsWith('@s.whatsapp.net');
 }
@@ -127,6 +129,8 @@ async function handleWebhook(req, res) {
   if (event !== 'messages.upsert') return res.sendStatus(200);
   if (!data?.key) return res.sendStatus(200);
   if (!isPrivateChat(data.key.remoteJid)) return res.sendStatus(200);
+  console.log('[startup-filter] ts:', data.messageTimestamp, 'startup:', STARTUP_TIMESTAMP);
+  if (data.messageTimestamp && data.messageTimestamp < STARTUP_TIMESTAMP) return res.sendStatus(200);
 
   const text = extractMessage(data);
   const hasAudio = !text && !!data.message?.audioMessage;
