@@ -3,6 +3,40 @@ const { getCompanySettings } = require('./config');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+const DAY_LABELS = { mon: 'Seg', tue: 'Ter', wed: 'Qua', thu: 'Qui', fri: 'Sex', sat: 'Sáb', sun: 'Dom' };
+const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+function formatBusinessHours(businessHours) {
+  if (!businessHours) return '24 horas';
+  const active = DAYS.filter((d) => businessHours[d]);
+  if (active.length === 0) return 'Fechado';
+
+  const groups = [];
+  let group = [active[0]];
+  for (let i = 1; i < active.length; i++) {
+    const prev = active[i - 1];
+    const curr = active[i];
+    const consecutive = DAYS.indexOf(curr) === DAYS.indexOf(prev) + 1;
+    const sameTime = businessHours[prev].open === businessHours[curr].open &&
+                     businessHours[prev].close === businessHours[curr].close;
+    if (consecutive && sameTime) {
+      group.push(curr);
+    } else {
+      groups.push(group);
+      group = [curr];
+    }
+  }
+  groups.push(group);
+
+  return groups.map((g) => {
+    const { open, close } = businessHours[g[0]];
+    const label = g.length === 1
+      ? DAY_LABELS[g[0]]
+      : `${DAY_LABELS[g[0]]}–${DAY_LABELS[g[g.length - 1]]}`;
+    return `${label} ${open}–${close}`;
+  }).join(', ');
+}
+
 async function buildSystemPrompt() {
   const company = await getCompanySettings();
   if (!company) return 'Você é um assistente virtual. Responda apenas dúvidas relacionadas à empresa.';
@@ -11,9 +45,11 @@ async function buildSystemPrompt() {
     .map((f) => `P: ${f.pergunta}\nR: ${f.resposta}`)
     .join('\n\n');
 
+  const horario = formatBusinessHours(company.business_hours);
+
   return `Você é um assistente virtual da ${company.nome}.
 ${company.descricao}
-Horário de atendimento: ${company.horario}
+Horário de atendimento: ${horario}
 Contato: ${company.contato}
 
 Perguntas frequentes:
@@ -68,4 +104,4 @@ async function chatWithImage(base64, caption) {
   return response.choices[0].message.content;
 }
 
-module.exports = { chat, buildSystemPrompt, chatWithImage };
+module.exports = { chat, buildSystemPrompt, chatWithImage, formatBusinessHours };

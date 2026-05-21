@@ -7,7 +7,6 @@ interface CompanyData {
   id?: number;
   nome: string;
   descricao: string;
-  horario: string;
   contato: string;
 }
 
@@ -15,7 +14,7 @@ const inputClass = 'w-full rounded-lg border border-slate-200 bg-white px-3 py-2
 
 export default function CompanyInfo({ initial }: { initial: CompanyData | null }) {
   const [data, setData] = useState<CompanyData>(
-    initial ?? { nome: '', descricao: '', horario: '', contato: '' }
+    initial ?? { nome: '', descricao: '', contato: '' }
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -44,10 +43,6 @@ export default function CompanyInfo({ initial }: { initial: CompanyData | null }
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-500">Descrição</label>
           <textarea className={inputClass} rows={3} value={data.descricao} onChange={(e) => update({ descricao: e.target.value })} />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Horário (texto exibido ao cliente)</label>
-          <input className={inputClass} placeholder="ex: Seg–Sex 9h às 18h" value={data.horario} onChange={(e) => update({ horario: e.target.value })} />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-500">Contato</label>

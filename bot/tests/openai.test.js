@@ -14,17 +14,46 @@ jest.mock('../src/config', () => ({
 
 process.env.OPENAI_API_KEY = 'test-key';
 
-const { chat, buildSystemPrompt, chatWithImage } = require('../src/openai');
+const { chat, buildSystemPrompt, chatWithImage, formatBusinessHours } = require('../src/openai');
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockGetCompanySettings.mockResolvedValue({
     nome: 'Empresa Teste',
     descricao: 'Empresa de tecnologia.',
-    horario: '9h às 18h',
     contato: 'teste@teste.com',
     faq: [{ pergunta: 'Qual o prazo?', resposta: '5 dias úteis.' }],
+    business_hours: {
+      mon: { open: '09:00', close: '18:00' },
+      tue: { open: '09:00', close: '18:00' },
+      wed: { open: '09:00', close: '18:00' },
+      thu: { open: '09:00', close: '18:00' },
+      fri: { open: '09:00', close: '18:00' },
+      sat: null,
+      sun: null,
+    },
   });
+});
+
+test('formatBusinessHours formata dias consecutivos com mesmo horário', () => {
+  const bh = {
+    mon: { open: '09:00', close: '18:00' },
+    tue: { open: '09:00', close: '18:00' },
+    wed: { open: '09:00', close: '18:00' },
+    thu: { open: '09:00', close: '18:00' },
+    fri: { open: '09:00', close: '18:00' },
+    sat: null,
+    sun: null,
+  };
+  expect(formatBusinessHours(bh)).toBe('Seg–Sex 09:00–18:00');
+});
+
+test('formatBusinessHours retorna "24 horas" quando business_hours é null', () => {
+  expect(formatBusinessHours(null)).toBe('24 horas');
+});
+
+test('formatBusinessHours retorna "Fechado" quando nenhum dia está ativo', () => {
+  expect(formatBusinessHours({ mon: null, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null })).toBe('Fechado');
 });
 
 test('buildSystemPrompt inclui nome e FAQ da empresa', async () => {
