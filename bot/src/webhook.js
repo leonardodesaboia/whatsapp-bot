@@ -9,7 +9,7 @@ const { handleSchedulingFlow } = require('./scheduling');
 const { handlePaymentFlow } = require('./payment');
 const { transcribeAudio } = require('./audio');
 const { handleImageMessage } = require('./image');
-const { sendBroadcast, loadContacts } = require('./broadcast');
+const { sendBroadcast } = require('./broadcast');
 const { upsertLead, addInteraction } = require('./crm');
 
 function isPrivateChat(remoteJid) {
@@ -46,7 +46,6 @@ async function handleCommand(parsed, res) {
 
   if (cmd === '/broadcast' && args.length >= 1) {
     const message = args.join(' ');
-    const contacts = loadContacts();
     (async () => {
       try {
         await sendBroadcast(message);
@@ -54,7 +53,7 @@ async function handleCommand(parsed, res) {
         console.error('Erro no broadcast:', err.message);
       }
     })();
-    return res.json({ ok: true, queued: contacts.length });
+    return res.json({ ok: true });
   }
 
   return res.sendStatus(200);
@@ -142,14 +141,15 @@ async function handleWebhook(req, res) {
 
   if (await isHumanMode(phone)) return res.sendStatus(200);
 
-  if (!isOpen()) {
+  if (!await isOpen()) {
     res.sendStatus(200);
     (async () => {
       try {
         await upsertLead(phone, pushName, incomingContent, messageType);
         await addInteraction(phone, incomingContent, 'in', messageType);
-        await sendText(phone, getClosedMessage());
-        await addInteraction(phone, getClosedMessage(), 'out', 'text');
+        const closedMsg = await getClosedMessage();
+        await sendText(phone, closedMsg);
+        await addInteraction(phone, closedMsg, 'out', 'text');
       } catch (err) {
         console.error('Erro ao responder fora do horário:', err.message);
       }
