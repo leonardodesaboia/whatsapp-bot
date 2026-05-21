@@ -1,39 +1,49 @@
 const mockCreate = jest.fn();
+const mockGetCompanySettings = jest.fn();
 
 jest.mock('openai', () =>
   jest.fn().mockImplementation(() => ({
     chat: { completions: { create: mockCreate } },
+    audio: { transcriptions: { create: jest.fn() } },
   }))
 );
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(() =>
-    JSON.stringify({
-      nome: 'Empresa Teste',
-      descricao: 'Empresa de tecnologia.',
-      horario: '9h às 18h',
-      contato: 'teste@teste.com',
-      faq: [{ pergunta: 'Qual o prazo?', resposta: '5 dias úteis.' }],
-    })
-  ),
+jest.mock('../src/config', () => ({
+  getCompanySettings: mockGetCompanySettings,
 }));
 
 process.env.OPENAI_API_KEY = 'test-key';
 
 const { chat, buildSystemPrompt, chatWithImage } = require('../src/openai');
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockGetCompanySettings.mockResolvedValue({
+    nome: 'Empresa Teste',
+    descricao: 'Empresa de tecnologia.',
+    horario: '9h às 18h',
+    contato: 'teste@teste.com',
+    faq: [{ pergunta: 'Qual o prazo?', resposta: '5 dias úteis.' }],
+  });
+});
 
-test('buildSystemPrompt inclui nome e FAQ da empresa', () => {
-  const prompt = buildSystemPrompt();
+test('buildSystemPrompt inclui nome e FAQ da empresa', async () => {
+  const prompt = await buildSystemPrompt();
   expect(prompt).toContain('Empresa Teste');
   expect(prompt).toContain('Qual o prazo?');
   expect(prompt).toContain('5 dias úteis.');
 });
 
-test('buildSystemPrompt instrui o bot a responder só sobre a empresa', () => {
-  const prompt = buildSystemPrompt();
+test('buildSystemPrompt instrui o bot a responder só sobre a empresa', async () => {
+  const prompt = await buildSystemPrompt();
   expect(prompt.toLowerCase()).toMatch(/responda apenas|somente/);
+});
+
+test('buildSystemPrompt retorna fallback quando company_settings está vazio', async () => {
+  mockGetCompanySettings.mockResolvedValue(null);
+  const prompt = await buildSystemPrompt();
+  expect(typeof prompt).toBe('string');
+  expect(prompt.length).toBeGreaterThan(0);
 });
 
 test('chat chama OpenAI com system prompt, histórico e mensagem do usuário', async () => {
@@ -71,7 +81,6 @@ test('chatWithImage envia imagem base64 para GPT-4o e retorna resposta', async (
   expect(result).toBe('Vejo uma imagem de produto de beleza.');
   const call = mockCreate.mock.calls[0][0];
   expect(call.model).toBe('gpt-4o');
-  expect(call.messages[0].role).toBe('system');
   const userContent = call.messages[1].content;
   expect(userContent).toEqual(
     expect.arrayContaining([

@@ -1,17 +1,16 @@
 const OpenAI = require('openai');
-const fs = require('fs');
-const path = require('path');
+const { getCompanySettings } = require('./config');
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const company = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '../company.json'), 'utf8')
-);
+async function buildSystemPrompt() {
+  const company = await getCompanySettings();
+  if (!company) return 'Você é um assistente virtual. Responda apenas dúvidas relacionadas à empresa.';
 
-function buildSystemPrompt() {
-  const faqText = company.faq
+  const faqText = (company.faq || [])
     .map((f) => `P: ${f.pergunta}\nR: ${f.resposta}`)
     .join('\n\n');
+
   return `Você é um assistente virtual da ${company.nome}.
 ${company.descricao}
 Horário de atendimento: ${company.horario}
@@ -32,7 +31,7 @@ INSTRUÇÕES ESPECIAIS — responda APENAS com o token abaixo (sem texto adicion
 
 async function chat(history, userMessage) {
   const messages = [
-    { role: 'system', content: buildSystemPrompt() },
+    { role: 'system', content: await buildSystemPrompt() },
     ...history,
     { role: 'user', content: userMessage },
   ];
@@ -48,7 +47,7 @@ async function chat(history, userMessage) {
 
 async function chatWithImage(base64, caption) {
   const messages = [
-    { role: 'system', content: buildSystemPrompt() },
+    { role: 'system', content: await buildSystemPrompt() },
     {
       role: 'user',
       content: [
@@ -57,7 +56,10 @@ async function chatWithImage(base64, caption) {
       ],
     },
   ];
-  const response = await openai.chat.completions.create({ model: process.env.OPENAI_MODEL || 'gpt-4o', messages });
+  const response = await openai.chat.completions.create({
+    model: process.env.OPENAI_MODEL || 'gpt-4o',
+    messages,
+  });
   if (!response.choices?.length) return 'Não consegui analisar a imagem.';
   return response.choices[0].message.content;
 }

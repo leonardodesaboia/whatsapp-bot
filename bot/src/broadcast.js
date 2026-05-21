@@ -1,16 +1,8 @@
-const fs = require('fs');
-const path = require('path');
+const { getContacts } = require('./config');
 const { sendText } = require('./evolutionApi');
 
-function loadContacts() {
-  const data = JSON.parse(
-    fs.readFileSync(path.join(__dirname, '../contacts.json'), 'utf8')
-  );
-  return data.contacts || [];
-}
-
 async function sendBroadcast(message) {
-  const contacts = loadContacts();
+  const contacts = await getContacts();
   const delay = parseInt(process.env.BROADCAST_DELAY_MS || '1000', 10);
   let sent = 0;
   let failed = 0;
@@ -32,4 +24,4 @@ async function sendBroadcast(message) {
   return { sent, failed };
 }
 
-module.exports = { loadContacts, sendBroadcast };
+module.exports = { sendBroadcast };

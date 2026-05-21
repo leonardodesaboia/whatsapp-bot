@@ -10,6 +10,7 @@ const mockRedisSet = jest.fn();
 const mockRedisDel = jest.fn();
 const mockRedisKeys = jest.fn();
 const mockRedisClient = { set: mockRedisSet, del: mockRedisDel, keys: mockRedisKeys, get: jest.fn() };
+const mockGetCompanySettings = jest.fn();
 
 jest.mock('googleapis', () => ({
   google: {
@@ -51,23 +52,8 @@ jest.mock('../src/redis', () => ({
   appendHistory: jest.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(() =>
-    JSON.stringify({
-      businessHours: {
-        timezone: 'America/Sao_Paulo',
-        schedule: {
-          mon: { open: '09:00', close: '18:00' },
-          tue: { open: '09:00', close: '18:00' },
-          wed: { open: '09:00', close: '18:00' },
-          thu: { open: '09:00', close: '18:00' },
-          fri: { open: '09:00', close: '18:00' },
-          sat: null,
-          sun: null,
-        },
-      },
-    })
-  ),
+jest.mock('../src/config', () => ({
+  getCompanySettings: mockGetCompanySettings,
 }));
 
 process.env.GOOGLE_CALENDAR_ID = 'test@calendar.google.com';
@@ -75,7 +61,21 @@ process.env.GOOGLE_APPLICATION_CREDENTIALS = '/fake/credentials.json';
 
 const { createAppointment, cancelAppointment, handleSchedulingFlow } = require('../src/scheduling');
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockGetCompanySettings.mockResolvedValue({
+    timezone: 'America/Sao_Paulo',
+    business_hours: {
+      mon: { open: '09:00', close: '18:00' },
+      tue: { open: '09:00', close: '18:00' },
+      wed: { open: '09:00', close: '18:00' },
+      thu: { open: '09:00', close: '18:00' },
+      fri: { open: '09:00', close: '18:00' },
+      sat: null,
+      sun: null,
+    },
+  });
+});
 
 test('createAppointment insere evento no Google Calendar e retorna eventId', async () => {
   mockEventsInsert.mockResolvedValue({ data: { id: 'evt-123' } });

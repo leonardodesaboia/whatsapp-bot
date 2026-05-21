@@ -3,6 +3,7 @@ const { sendText } = require('./evolutionApi');
 const { sendNotification } = require('./notify');
 const { setState, clearState } = require('./state');
 const { getClient } = require('./redis');
+const { getCompanySettings } = require('./config');
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 const DAY_MAP = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -35,10 +36,9 @@ function formatTime(date) {
 }
 
 async function getAvailableSlots(date, durationMinutes) {
-  const fs = require('fs');
-  const path = require('path');
-    const company = JSON.parse(fs.readFileSync(path.join(__dirname, '../company.json'), 'utf8'));
-  const { timezone, schedule } = company.businessHours;
+  const company = await getCompanySettings();
+  const timezone = company?.timezone || 'America/Sao_Paulo';
+  const schedule = company?.business_hours || {};
 
   const localDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
   const dayKey = DAY_MAP[localDate.getDay()];
