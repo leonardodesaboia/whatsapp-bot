@@ -21,6 +21,7 @@ async function buildCategoryListMessage() {
   return {
     title: 'O que você procura?',
     buttonText: 'Ver opções',
+    footerText: '',
     sections: [
       {
         title: 'Categorias',
@@ -40,6 +41,7 @@ async function buildItemListMessage(categorySlug) {
   return {
     title: category.title,
     buttonText: 'Selecionar',
+    footerText: '',
     sections: [
       {
         title: category.title,
