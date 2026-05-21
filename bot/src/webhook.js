@@ -11,6 +11,7 @@ const { transcribeAudio } = require('./audio');
 const { handleImageMessage } = require('./image');
 const { sendBroadcast } = require('./broadcast');
 const { upsertLead, addInteraction } = require('./crm');
+const { cancelEnrollment } = require('./remarketing');
 
 function isPrivateChat(remoteJid) {
   return typeof remoteJid === 'string' && remoteJid.endsWith('@s.whatsapp.net');
@@ -138,6 +139,8 @@ async function handleWebhook(req, res) {
   const messageType = hasImage ? 'image' : hasAudio ? 'audio' : 'text';
   const incomingContent = text || (hasAudio ? '[áudio]' : '[imagem]');
   const pushName = data.pushName || null;
+
+  void cancelEnrollment(phone);
 
   if (await isHumanMode(phone)) return res.sendStatus(200);
 
