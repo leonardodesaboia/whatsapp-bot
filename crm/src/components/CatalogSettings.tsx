@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { X, Trash2, Pencil } from 'lucide-react';
 
 interface CatalogItem {
   id: number;
@@ -159,8 +160,8 @@ export default function CatalogSettings({ initialCategories }: { initialCategori
                         <span className="truncate">{cat.title}</span>
                         <button
                           onClick={(e) => { e.stopPropagation(); void deleteCategory(cat.id); }}
-                          className={`ml-1 text-xs ${selectedId === cat.id ? 'text-slate-300 hover:text-white' : 'text-slate-400 hover:text-rose-500'}`}
-                        >×</button>
+                          className={`ml-1 transition ${selectedId === cat.id ? 'text-slate-300 hover:text-white' : 'text-slate-400 hover:text-rose-500'}`}
+                        ><X size={12} strokeWidth={2.5} /></button>
                       </div>
                     )}
                   </Draggable>
@@ -217,8 +218,8 @@ export default function CatalogSettings({ initialCategories }: { initialCategori
                                   <p className="text-xs text-slate-500">R$ {parseFloat(item.price).toFixed(2)}{item.duration ? ` • ${item.duration} min` : ''}</p>
                                 </div>
                                 <div className="flex gap-2">
-                                  <button onClick={() => setEditingItem(item)} className="text-xs text-sky-600 hover:text-sky-700">Editar</button>
-                                  <button onClick={() => void deleteItem(item.id)} className="text-xs text-rose-500 hover:text-rose-600">Remover</button>
+                                  <button onClick={() => setEditingItem(item)} className="text-slate-400 transition hover:text-sky-600"><Pencil size={13} strokeWidth={2} /></button>
+                                  <button onClick={() => void deleteItem(item.id)} className="text-slate-400 transition hover:text-rose-500"><Trash2 size={13} strokeWidth={2} /></button>
                                 </div>
                               </div>
                             )}

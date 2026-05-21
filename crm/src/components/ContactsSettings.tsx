@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 
 interface Contact { id: number; phone: string; name: string | null; }
 interface Lead { id: number; phone: string; name: string | null; stage_id: number; }
@@ -94,7 +95,7 @@ export default function ContactsSettings({
         {contacts.map((c) => (
           <div key={c.id} className="flex items-center justify-between rounded-xl bg-slate-50 border border-slate-200 px-3 py-2 text-sm">
             <span className="text-slate-800">{c.name || <span className="text-slate-400">Sem nome</span>} <span className="text-slate-400 ml-2">{c.phone}</span></span>
-            <button onClick={() => void removeContact(c.id)} className="text-rose-500 hover:text-rose-600 text-xs">Remover</button>
+            <button onClick={() => void removeContact(c.id)} className="text-slate-300 transition hover:text-rose-500"><Trash2 size={13} strokeWidth={2} /></button>
           </div>
         ))}
       </div>

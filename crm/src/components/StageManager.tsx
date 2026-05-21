@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Trash2 } from 'lucide-react';
 
 interface Stage {
   id: number;
@@ -95,9 +96,9 @@ export default function StageManager({
             />
             <button
               onClick={() => handleDelete(stage.id)}
-              className="text-sm text-rose-500 transition hover:text-rose-600"
+              className="text-slate-300 transition hover:text-rose-500"
             >
-              Remover
+              <Trash2 size={14} strokeWidth={2} />
             </button>
           </div>
         ))}
