@@ -148,11 +148,16 @@ app.listen(PORT, async () => {
   }
 
   const botUrl = process.env.BOT_WEBHOOK_URL || `http://bot:${PORT}`;
-  try {
-    await registerWebhook(botUrl);
-    console.log(`Webhook registrado em ${botUrl}/webhook`);
-  } catch (err) {
-    console.warn('Aviso: não foi possível registrar webhook automaticamente.', err.message);
-    console.warn(`Registre manualmente: POST ${process.env.EVOLUTION_API_URL}/webhook/set/${process.env.EVOLUTION_INSTANCE}`);
+
+  async function tryRegisterWebhook() {
+    try {
+      await registerWebhook(botUrl);
+      console.log(`Webhook registrado em ${botUrl}/webhook`);
+    } catch (err) {
+      console.warn(`Webhook não registrado (${err.message}), tentando novamente em 30s...`);
+      setTimeout(() => void tryRegisterWebhook(), 30000);
+    }
   }
+
+  void tryRegisterWebhook();
 });
