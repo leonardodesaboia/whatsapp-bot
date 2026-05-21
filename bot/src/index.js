@@ -11,6 +11,7 @@ const { sendNotification } = require('./notify');
 const { rescheduleAllReminders } = require('./scheduling');
 const { sendBroadcast } = require('./broadcast');
 const { rescheduleRemarketing } = require('./remarketing');
+const { clearState } = require('./state');
 
 const app = express();
 app.use(express.json());
@@ -36,6 +37,19 @@ app.post('/notify', async (req, res) => {
     console.error('Erro ao enviar notificação:', err.message);
     res.status(500).json({ error: 'Failed to send notification' });
   }
+});
+
+app.post('/bot-on', async (req, res) => {
+  const token = req.headers['x-api-key'];
+  if (token !== process.env.WEBHOOK_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const { phone } = req.body;
+  if (!phone) {
+    return res.status(400).json({ error: 'phone is required' });
+  }
+  await clearState(phone);
+  res.json({ ok: true });
 });
 
 app.post('/broadcast', async (req, res) => {

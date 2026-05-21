@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import { getPool } from '@/lib/db';
 import LeadForm from '@/components/LeadForm';
 import InteractionTimeline from '@/components/InteractionTimeline';
+import LeadActions from '@/components/LeadActions';
 
 interface Props {
   params: { id: string };
@@ -59,6 +60,11 @@ export default async function LeadDetailPage({ params }: Props) {
       </div>
 
       <div className="space-y-6">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">Ações rápidas</h2>
+          <LeadActions phone={lead.phone} />
+        </section>
+
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-slate-900">
             Dados do lead
