@@ -124,6 +124,12 @@ async function handleWebhook(req, res) {
     const text = extractMessage(data);
     const command = parseCommand(text);
     if (command) return handleCommand(command, res);
+    // source 'android'/'ios'/'web' = operador digitando manualmente; 'api' = bot enviando
+    if (isPrivateChat(data.key.remoteJid) && data.source && data.source !== 'api') {
+      const phone = data.key.remoteJid.replace('@s.whatsapp.net', '');
+      const pauseMins = parseInt(process.env.HUMAN_REPLY_PAUSE_MINUTES || '10', 10);
+      void setHumanMode(phone, pauseMins);
+    }
     return res.sendStatus(200);
   }
 
