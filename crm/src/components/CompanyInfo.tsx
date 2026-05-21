@@ -41,8 +41,21 @@ export default function CompanyInfo({ initial }: { initial: CompanyData | null }
           <input className={inputClass} value={data.nome} onChange={(e) => update({ nome: e.target.value })} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-slate-500">Descrição</label>
-          <textarea className={inputClass} rows={3} value={data.descricao} onChange={(e) => update({ descricao: e.target.value })} />
+          <label className="mb-1 block text-xs font-medium text-slate-500">Contexto do bot</label>
+          <p className="mb-1.5 text-xs text-slate-400">
+            Explica ao bot o que é a empresa, como ele deve se comportar e o que pode ou não responder.
+            Quanto mais detalhado, melhor a qualidade das respostas.
+          </p>
+          <textarea
+            className={inputClass}
+            rows={5}
+            value={data.descricao}
+            onChange={(e) => update({ descricao: e.target.value })}
+            placeholder={`Exemplo:
+Somos um salão de beleza especializado em cortes, coloração e tratamentos capilares. Atendemos apenas com hora marcada.
+
+Use linguagem informal e simpática. Nunca mencione preços sem antes verificar com o cliente o serviço desejado. Não responda perguntas sobre concorrentes.`}
+          />
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-500">Contato</label>
