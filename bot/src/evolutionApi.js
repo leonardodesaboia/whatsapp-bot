@@ -31,11 +31,16 @@ async function registerWebhook(botPublicUrl) {
 }
 
 async function sendList(to, listMessage) {
-  await axios.post(
-    `${BASE_URL}/message/sendList/${INSTANCE}`,
-    { number: to, ...listMessage },
-    { headers: { apikey: API_KEY } }
-  );
+  try {
+    await axios.post(
+      `${BASE_URL}/message/sendList/${INSTANCE}`,
+      { number: to, ...listMessage },
+      { headers: { apikey: API_KEY } }
+    );
+  } catch (err) {
+    console.error('sendList 400 body:', JSON.stringify(err.response?.data));
+    throw err;
+  }
 }
 
 async function sendImageBase64(to, base64, caption) {

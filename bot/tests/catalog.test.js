@@ -1,12 +1,11 @@
 const mockSendText = jest.fn();
-const mockSendList = jest.fn();
 const mockSetState = jest.fn();
 const mockClearState = jest.fn();
 const mockGetCatalogCategories = jest.fn();
 
 jest.mock('../src/evolutionApi', () => ({
   sendText: mockSendText,
-  sendList: mockSendList,
+  sendList: jest.fn(),
   registerWebhook: jest.fn(),
 }));
 
@@ -39,14 +38,7 @@ beforeEach(() => {
   mockGetCatalogCategories.mockResolvedValue(MOCK_CATEGORIES);
 });
 
-const {
-  getCategories,
-  getCategory,
-  getItem,
-  buildCategoryListMessage,
-  buildItemListMessage,
-  handleCatalogFlow,
-} = require('../src/catalog');
+const { getCategories, getCategory, getItem, handleCatalogFlow } = require('../src/catalog');
 
 test('getCategories retorna todas as categorias', async () => {
   const cats = await getCategories();
@@ -65,49 +57,44 @@ test('getItem retorna item por categorySlug e itemSlug', async () => {
   expect(await getItem('nope', 'basic')).toBeNull();
 });
 
-test('buildCategoryListMessage retorna estrutura de list message com slug como rowId', async () => {
-  const msg = await buildCategoryListMessage();
-  expect(msg.sections[0].rows[0].rowId).toBe('services');
-  expect(msg.sections[0].rows[0].title).toBe('Serviços');
-});
-
-test('buildItemListMessage retorna itens da categoria com rowId "catSlug:itemSlug"', async () => {
-  const msg = await buildItemListMessage('services');
-  expect(msg.sections[0].rows[0].rowId).toBe('services:basic');
-  expect(msg.sections[0].rows[0].title).toBe('Serviço Básico');
-});
-
-test('buildItemListMessage retorna null para categoria inválida', async () => {
-  expect(await buildItemListMessage('nope')).toBeNull();
-});
-
-test('handleCatalogFlow step 0 envia list message de categorias', async () => {
-  mockSetState.mockResolvedValue(undefined);
-  mockSendList.mockResolvedValue(undefined);
-  await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 0, data: {} }, 'menu');
-  expect(mockSetState).toHaveBeenCalledWith('5511999999999', { flow: 'catalog', step: 1, data: {} });
-  expect(mockSendList).toHaveBeenCalled();
-});
-
-test('handleCatalogFlow step 1 envia itens da categoria selecionada', async () => {
-  mockSetState.mockResolvedValue(undefined);
-  mockSendList.mockResolvedValue(undefined);
-  await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 1, data: {} }, 'services');
-  expect(mockSetState).toHaveBeenCalledWith('5511999999999', { flow: 'catalog', step: 2, data: { categoryId: 'services' } });
-  expect(mockSendList).toHaveBeenCalled();
-});
-
-test('handleCatalogFlow step 2 mostra detalhes do item selecionado', async () => {
+test('handleCatalogFlow step 0 envia lista numerada de categorias', async () => {
   mockSetState.mockResolvedValue(undefined);
   mockSendText.mockResolvedValue(undefined);
-  await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 2, data: { categoryId: 'services' } }, 'services:basic');
+  await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 0, data: {} }, 'menu');
+  expect(mockSetState).toHaveBeenCalledWith('5511999999999', {
+    flow: 'catalog', step: 1, data: { options: ['services'] },
+  });
+  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('1. Serviços'));
+});
+
+test('handleCatalogFlow step 1 envia itens da categoria selecionada por número', async () => {
+  mockSetState.mockResolvedValue(undefined);
+  mockSendText.mockResolvedValue(undefined);
+  await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 1, data: { options: ['services'] } }, '1');
+  expect(mockSetState).toHaveBeenCalledWith('5511999999999', {
+    flow: 'catalog', step: 2, data: { categoryId: 'services', options: ['basic'] },
+  });
+  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('Serviço Básico'));
+});
+
+test('handleCatalogFlow step 1 rejeita número inválido', async () => {
+  mockSendText.mockResolvedValue(undefined);
+  await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 1, data: { options: ['services'] } }, '5');
+  expect(mockSetState).not.toHaveBeenCalled();
+  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('inválida'));
+});
+
+test('handleCatalogFlow step 2 mostra detalhes do item selecionado por número', async () => {
+  mockSetState.mockResolvedValue(undefined);
+  mockSendText.mockResolvedValue(undefined);
+  await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 2, data: { categoryId: 'services', options: ['basic'] } }, '1');
   expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('Serviço Básico'));
 });
 
 test('handleCatalogFlow "cancelar" limpa estado', async () => {
   mockClearState.mockResolvedValue(undefined);
   mockSendText.mockResolvedValue(undefined);
-  await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 1, data: {} }, 'cancelar');
+  await handleCatalogFlow('5511999999999', { flow: 'catalog', step: 1, data: { options: ['services'] } }, 'cancelar');
   expect(mockClearState).toHaveBeenCalledWith('5511999999999');
 });
 

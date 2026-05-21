@@ -1,5 +1,5 @@
 const { getCatalogCategories } = require('./config');
-const { sendText, sendList } = require('./evolutionApi');
+const { sendText } = require('./evolutionApi');
 const { setState, clearState } = require('./state');
 
 async function getCategories() {
@@ -16,45 +16,6 @@ async function getItem(categorySlug, itemSlug) {
   return cat ? cat.items.find((i) => i.slug === itemSlug) || null : null;
 }
 
-async function buildCategoryListMessage() {
-  const categories = await getCatalogCategories();
-  return {
-    title: 'O que você procura?',
-    buttonText: 'Ver opções',
-    footerText: '',
-    sections: [
-      {
-        title: 'Categorias',
-        rows: categories.map((c) => ({
-          rowId: c.slug,
-          title: c.title,
-          description: `${c.items.length} opção(ões) disponível(eis)`,
-        })),
-      },
-    ],
-  };
-}
-
-async function buildItemListMessage(categorySlug) {
-  const category = await getCategory(categorySlug);
-  if (!category) return null;
-  return {
-    title: category.title,
-    buttonText: 'Selecionar',
-    footerText: '',
-    sections: [
-      {
-        title: category.title,
-        rows: category.items.map((i) => ({
-          rowId: `${categorySlug}:${i.slug}`,
-          title: i.title,
-          description: `R$ ${parseFloat(i.price).toFixed(2)}${i.duration ? ` • ${i.duration} min` : ''}`,
-        })),
-      },
-    ],
-  };
-}
-
 async function handleCatalogFlow(phone, state, text) {
   if (text?.toLowerCase() === 'cancelar') {
     await clearState(phone);
@@ -63,37 +24,58 @@ async function handleCatalogFlow(phone, state, text) {
   }
 
   if (state.step === 0) {
-    await setState(phone, { flow: 'catalog', step: 1, data: {} });
-    await sendList(phone, await buildCategoryListMessage());
+    const categories = await getCatalogCategories();
+    if (categories.length === 0) {
+      await clearState(phone);
+      await sendText(phone, 'Nosso catálogo está sendo atualizado. Tente novamente em breve.');
+      return;
+    }
+    const lines = categories.map((c, i) => `${i + 1}. ${c.title}`).join('\n');
+    await setState(phone, { flow: 'catalog', step: 1, data: { options: categories.map((c) => c.slug) } });
+    await sendText(phone, `O que você procura?\n\n${lines}\n\nDigite o número ou "cancelar".`);
     return;
   }
 
   if (state.step === 1) {
-    const category = await getCategory(text);
+    const options = state.data.options || [];
+    const idx = parseInt(text, 10) - 1;
+    const categorySlug = options[idx];
+    const category = categorySlug ? await getCategory(categorySlug) : null;
     if (!category) {
-      await sendText(phone, 'Categoria não encontrada. Escolha uma opção válida ou digite "cancelar".');
+      await sendText(phone, `Opção inválida. Digite um número de 1 a ${options.length} ou "cancelar".`);
       return;
     }
-    await setState(phone, { flow: 'catalog', step: 2, data: { categoryId: text } });
-    await sendList(phone, await buildItemListMessage(text));
+    if (category.items.length === 0) {
+      await sendText(phone, `${category.title} não possui itens no momento. Digite outro número ou "cancelar".`);
+      return;
+    }
+    const lines = category.items.map((item, i) => {
+      const price = `R$ ${parseFloat(item.price).toFixed(2)}`;
+      const dur = item.duration ? ` • ${item.duration} min` : '';
+      return `${i + 1}. ${item.title} — ${price}${dur}`;
+    }).join('\n');
+    await setState(phone, { flow: 'catalog', step: 2, data: { categoryId: categorySlug, options: category.items.map((i) => i.slug) } });
+    await sendText(phone, `*${category.title}*\n\n${lines}\n\nDigite o número ou "cancelar".`);
     return;
   }
 
   if (state.step === 2) {
-    const [categorySlug, itemSlug] = (text || '').split(':');
-    const item = await getItem(categorySlug, itemSlug);
+    const { categoryId, options } = state.data;
+    const idx = parseInt(text, 10) - 1;
+    const itemSlug = options?.[idx];
+    const item = itemSlug ? await getItem(categoryId, itemSlug) : null;
     if (!item) {
-      await sendText(phone, 'Item não encontrado. Escolha uma opção válida ou digite "cancelar".');
+      await sendText(phone, `Opção inválida. Digite um número de 1 a ${options?.length || 0} ou "cancelar".`);
       return;
     }
     const price = parseFloat(item.price);
-    await setState(phone, { flow: 'catalog', step: 3, data: { categoryId: categorySlug, itemId: itemSlug, item: { ...item, price } } });
+    await setState(phone, { flow: 'catalog', step: 3, data: { categoryId, itemId: itemSlug, item: { ...item, price } } });
     const actions = item.duration
-      ? '• "agendar" para marcar um horário\n• "pagar" para gerar Pix'
-      : '• "pagar" para gerar Pix';
+      ? '"agendar" para marcar um horário\n• "pagar" para gerar Pix'
+      : '"pagar" para gerar Pix';
     await sendText(
       phone,
-      `*${item.title}*\n${item.description}\nPreço: R$ ${price.toFixed(2)}${item.duration ? `\nDuração: ${item.duration} min` : ''}\n\nDigite:\n${actions}\n• "cancelar" para voltar`
+      `*${item.title}*\n${item.description}\nPreço: R$ ${price.toFixed(2)}${item.duration ? `\nDuração: ${item.duration} min` : ''}\n\nDigite:\n• ${actions}\n• "cancelar" para voltar`
     );
     return;
   }
@@ -121,7 +103,5 @@ module.exports = {
   getCategories,
   getCategory,
   getItem,
-  buildCategoryListMessage,
-  buildItemListMessage,
   handleCatalogFlow,
 };
