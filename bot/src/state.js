@@ -21,8 +21,14 @@ async function clearState(phone) {
 }
 
 async function setHumanMode(phone, minutes) {
-  const mins = minutes ?? parseInt(process.env.HUMAN_TAKEOVER_TIMEOUT_MINUTES || '30', 10);
-  await setState(phone, { mode: 'human', flow: null, step: 0, data: {} }, mins * 60);
+  const state = { mode: 'human', flow: null, step: 0, data: {} };
+  if (minutes === null) {
+    const client = await getClient();
+    await client.set(`state:${phone}`, JSON.stringify(state));
+  } else {
+    const mins = minutes ?? parseInt(process.env.HUMAN_TAKEOVER_TIMEOUT_MINUTES || '30', 10);
+    await setState(phone, state, mins * 60);
+  }
 }
 
 async function isHumanMode(phone) {

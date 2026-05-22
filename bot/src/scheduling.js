@@ -9,10 +9,13 @@ const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 const DAY_MAP = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 async function getAuth() {
-  const auth = new google.auth.GoogleAuth({
-    keyFile: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-    scopes: ['https://www.googleapis.com/auth/calendar'],
-  });
+  const authConfig = { scopes: ['https://www.googleapis.com/auth/calendar'] };
+  if (process.env.GOOGLE_CREDENTIALS_JSON) {
+    authConfig.credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+  } else {
+    authConfig.keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  }
+  const auth = new google.auth.GoogleAuth(authConfig);
   return auth.getClient();
 }
 

@@ -16,7 +16,17 @@ const { cancelEnrollment } = require('./remarketing');
 const STARTUP_TIMESTAMP = process.env.NODE_ENV === 'production' ? 0 : Math.floor(Date.now() / 1000);
 
 function isPrivateChat(remoteJid) {
-  return typeof remoteJid === 'string' && remoteJid.endsWith('@s.whatsapp.net');
+  return typeof remoteJid === 'string' &&
+    (remoteJid.endsWith('@s.whatsapp.net') || remoteJid.endsWith('@lid'));
+}
+
+function extractPhone(data) {
+  const remoteJid = data?.key?.remoteJid;
+  if (remoteJid?.endsWith('@lid')) {
+    const senderPn = data?.key?.senderPn;
+    return senderPn ? senderPn.replace('@s.whatsapp.net', '') : null;
+  }
+  return remoteJid ? remoteJid.replace('@s.whatsapp.net', '') : null;
 }
 
 function extractMessage(data) {
@@ -136,7 +146,7 @@ async function handleWebhook(req, res) {
     const command = parseCommand(text);
     if (command) return handleCommand(command, res);
     if (isPrivateChat(data.key.remoteJid)) {
-      const phone = data.key.remoteJid.replace('@s.whatsapp.net', '');
+      const phone = extractPhone(data);
       if (data.source && data.source !== 'api') {
         // operador digitando manualmente → pausa o bot
         const pauseMins = parseInt(process.env.HUMAN_REPLY_PAUSE_MINUTES || '10', 10);
@@ -161,7 +171,8 @@ async function handleWebhook(req, res) {
 
   if (!text && !hasAudio && !hasImage) return res.sendStatus(200);
 
-  const phone = data.key.remoteJid.replace('@s.whatsapp.net', '');
+  const phone = extractPhone(data);
+  if (!phone) return res.sendStatus(200);
   const messageType = hasImage ? 'image' : hasAudio ? 'audio' : 'text';
   const incomingContent = text || (hasAudio ? '[áudio]' : '[imagem]');
   const pushName = data.pushName || null;
@@ -215,4 +226,4 @@ async function handleWebhook(req, res) {
   })();
 }
 
-module.exports = { handleWebhook, isPrivateChat, extractMessage, parseCommand };
+module.exports = { handleWebhook, isPrivateChat, extractPhone, extractMessage, parseCommand };

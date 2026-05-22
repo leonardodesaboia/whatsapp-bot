@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Trash2, ChevronRight, ToggleLeft, ToggleRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Trash2, ChevronRight, ToggleLeft, ToggleRight, Save } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 
 interface Step {
@@ -40,8 +40,16 @@ export default function RemarketingSettings({
   const [stepsLoaded, setStepsLoaded] = useState<number | null>(null);
   const [newName, setNewName] = useState('');
   const [newStep, setNewStep] = useState({ delay_days: '1', message: '' });
+  const [editConfig, setEditConfig] = useState({ name: '', trigger_days: '3' });
+  const [saving, setSaving] = useState(false);
 
   const selected = campaigns.find((c) => c.id === selectedId);
+
+  useEffect(() => {
+    if (selected) {
+      setEditConfig({ name: selected.name, trigger_days: String(selected.trigger_days) });
+    }
+  }, [selectedId]);
 
   const loadSteps = async (campaignId: number) => {
     if (stepsLoaded === campaignId) return;
@@ -92,6 +100,21 @@ export default function RemarketingSettings({
       body: JSON.stringify({ [field]: value }),
     });
     setCampaigns((prev) => prev.map((c) => c.id === id ? { ...c, [field]: value } : c));
+  };
+
+  const saveConfig = async () => {
+    if (!selected) return;
+    setSaving(true);
+    const trigger_days = parseInt(editConfig.trigger_days) || 3;
+    await fetch(`/api/remarketing/campaigns/${selected.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: editConfig.name.trim(), trigger_days }),
+    });
+    setCampaigns((prev) => prev.map((c) =>
+      c.id === selected.id ? { ...c, name: editConfig.name.trim(), trigger_days } : c
+    ));
+    setSaving(false);
   };
 
   const addStep = async () => {
@@ -198,8 +221,8 @@ export default function RemarketingSettings({
                 <label className="mb-1 block text-xs font-medium text-slate-500">Nome</label>
                 <input
                   className={inputClass}
-                  defaultValue={selected.name}
-                  onBlur={(e) => { if (e.target.value !== selected.name) void updateCampaignField(selected.id, 'name', e.target.value); }}
+                  value={editConfig.name}
+                  onChange={(e) => setEditConfig((c) => ({ ...c, name: e.target.value }))}
                 />
               </div>
               <div>
@@ -208,8 +231,8 @@ export default function RemarketingSettings({
                   className={inputClass}
                   type="number"
                   min={1}
-                  defaultValue={selected.trigger_days}
-                  onBlur={(e) => void updateCampaignField(selected.id, 'trigger_days', parseInt(e.target.value) || 3)}
+                  value={editConfig.trigger_days}
+                  onChange={(e) => setEditConfig((c) => ({ ...c, trigger_days: e.target.value }))}
                 />
               </div>
               <div>
@@ -223,10 +246,18 @@ export default function RemarketingSettings({
                   {stages.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
-              <div className="flex items-end">
+              <div className="flex items-end justify-between">
                 <p className="text-xs text-slate-400">
                   {String(selected.active_enrollments)} enrolados · {String(selected.completed_enrollments)} concluídos
                 </p>
+                <button
+                  onClick={() => void saveConfig()}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 rounded-lg bg-slate-950 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+                >
+                  <Save size={12} strokeWidth={2} />
+                  {saving ? 'Salvando…' : 'Salvar'}
+                </button>
               </div>
             </div>
           </div>

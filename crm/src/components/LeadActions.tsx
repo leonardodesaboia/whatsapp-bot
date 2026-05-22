@@ -41,7 +41,7 @@ export default function LeadActions({ phone }: { phone: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),
       });
-      showResult(setBotResult, res.ok ? 'Bot pausado por 10 min.' : 'Erro ao pausar.');
+      showResult(setBotResult, res.ok ? 'Bot pausado.' : 'Erro ao pausar.');
     } catch {
       showResult(setBotResult, 'Erro ao conectar com o bot.');
     }

@@ -48,9 +48,8 @@ app.post('/bot-pause', async (req, res) => {
   if (!phone) {
     return res.status(400).json({ error: 'phone is required' });
   }
-  const mins = parseInt(process.env.HUMAN_REPLY_PAUSE_MINUTES || '10', 10);
-  await setHumanMode(phone, mins);
-  res.json({ ok: true, pausedFor: mins });
+  await setHumanMode(phone, null);
+  res.json({ ok: true });
 });
 
 app.post('/bot-on', async (req, res) => {
