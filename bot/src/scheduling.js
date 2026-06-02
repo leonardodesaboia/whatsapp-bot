@@ -1,4 +1,4 @@
-const { google } = require('googleapis');
+﻿const { google } = require('googleapis');
 const { sendText } = require('./evolutionApi');
 const { sendNotification } = require('./notify');
 const { setState, clearState } = require('./state');
@@ -7,10 +7,10 @@ const { getCompanySettings } = require('./config');
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 const DAY_MAP = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-const DEFAULT_MEETING_SERVICE = 'Reunião';
+const DEFAULT_MEETING_SERVICE = 'Reuniao';
 const DEFAULT_DURATION_MINUTES = 60;
 const DEFAULT_LOOKAHEAD_DAYS = 14;
-const GENERIC_MEETING_INTENT = /\b(agendar|agenda|marcar|reuni[aã]o|call|conversa|hor[aá]rio|reserva)\b/i;
+const GENERIC_MEETING_INTENT = /\b(agendar|agenda|marcar|reuni[aÃ£]o|call|conversa|hor[aÃ¡]rio|reserva)\b/i;
 let googleCredentialsStatusLogged = false;
 
 function normalizePersonName(name) {
@@ -32,7 +32,7 @@ function getAppointmentDescription(phone, service, contactName) {
   const person = normalizePersonName(contactName);
   if (person) lines.push(`Nome: ${person}`);
   if (requested && requested !== getAppointmentTitle(requested, contactName)) {
-    lines.push(`Solicitação original: ${requested}`);
+    lines.push(`Solicitacao original: ${requested}`);
   }
   return lines.join('\n');
 }
@@ -96,25 +96,74 @@ function formatTime(date) {
   });
 }
 
-const DEFAULT_DAY_SCHEDULE = { open: '08:00', close: '18:00' };
+const DEFAULT_DAY_SCHEDULE = { open: '07:00', close: '18:00' };
+
+function getZonedDateParts(date, timezone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+
+  const values = Object.fromEntries(parts.filter((p) => p.type !== 'literal').map((p) => [p.type, Number(p.value)]));
+  if (values.hour === 24) values.hour = 0;
+  return values;
+}
+
+function getLocalDateKey(date, timezone) {
+  const parts = getZonedDateParts(date, timezone);
+  return [
+    parts.year,
+    String(parts.month).padStart(2, '0'),
+    String(parts.day).padStart(2, '0'),
+  ].join('-');
+}
+
+function zonedTimeToDate(dateKey, time, timezone) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+  const targetUtc = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  let utc = targetUtc;
+
+  for (let i = 0; i < 3; i++) {
+    const parts = getZonedDateParts(new Date(utc), timezone);
+    const localAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second || 0, 0);
+    utc -= localAsUtc - targetUtc;
+  }
+
+  return new Date(utc);
+}
+
+function formatDay(date) {
+  return new Date(date).toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+  });
+}
 
 async function getAvailableSlots(date, durationMinutes) {
   const company = await getCompanySettings();
   const timezone = company?.timezone || 'America/Sao_Paulo';
   const businessHours = company?.business_hours; // null = 24h
 
-  const localDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
-  const dayKey = DAY_MAP[localDate.getDay()];
+  const localDate = getZonedDateParts(date, timezone);
+  const dateKey = getLocalDateKey(date, timezone);
+  const dayKey = DAY_MAP[new Date(Date.UTC(localDate.year, localDate.month - 1, localDate.day)).getUTCDay()];
   // null = 24h mode -> use default hours; structured = use configured hours (null day = closed)
   const daySchedule = businessHours == null ? DEFAULT_DAY_SCHEDULE : (businessHours?.[dayKey] ?? null);
   if (!daySchedule) return [];
 
   const auth = await getAuth();
   const cal = google.calendar('v3');
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
+  const startOfDay = zonedTimeToDate(dateKey, '00:00', timezone);
+  const endOfDay = zonedTimeToDate(dateKey, '23:59', timezone);
 
   const response = await cal.events.list({
     auth,
@@ -131,15 +180,10 @@ async function getAvailableSlots(date, durationMinutes) {
   }));
 
   const slots = [];
-  const [openH, openM] = daySchedule.open.split(':').map(Number);
-  const [closeH, closeM] = daySchedule.close.split(':').map(Number);
+  const slotStart = zonedTimeToDate(dateKey, daySchedule.open, timezone);
+  const dayEnd = zonedTimeToDate(dateKey, daySchedule.close, timezone);
 
-  const slotStart = new Date(date);
-  slotStart.setHours(openH, openM, 0, 0);
-  const dayEnd = new Date(date);
-  dayEnd.setHours(closeH, closeM, 0, 0);
-
-  while (slotStart < dayEnd && slots.length < 5) {
+  while (slotStart < dayEnd) {
     const slotEnd = new Date(slotStart.getTime() + durationMinutes * 60000);
     if (slotEnd > dayEnd) break;
     const conflict = busyTimes.some((b) => slotStart < b.end && slotEnd > b.start);
@@ -185,8 +229,8 @@ async function scheduleReminders(phone, appointmentDate, eventId) {
   const h2 = new Date(dt.getTime() - 2 * 60 * 60 * 1000);
 
   const reminders = [
-    { key: `reminder:${phone}:${eventId}:d1`, fireAt: d1, message: `Lembrete: seu agendamento é amanhã às ${formatTime(dt)}.` },
-    { key: `reminder:${phone}:${eventId}:h2`, fireAt: h2, message: `Lembrete: seu agendamento é em 2 horas, às ${formatTime(dt)}.` },
+    { key: `reminder:${phone}:${eventId}:d1`, fireAt: d1, message: `Lembrete: seu agendamento e amanha as ${formatTime(dt)}.` },
+    { key: `reminder:${phone}:${eventId}:h2`, fireAt: h2, message: `Lembrete: seu agendamento e em 2 horas, as ${formatTime(dt)}.` },
   ];
 
   for (const { key, fireAt, message } of reminders) {
@@ -225,28 +269,47 @@ async function rescheduleAllReminders() {
   }
 }
 
-async function showAvailableSlots(phone, state, durationMinutes) {
-  const slots = [];
+async function collectAvailableDays(durationMinutes) {
+  const days = [];
   const today = new Date();
   const lookaheadDays = parseInt(process.env.SCHEDULING_LOOKAHEAD_DAYS || String(DEFAULT_LOOKAHEAD_DAYS), 10);
   const daysToSearch = Number.isFinite(lookaheadDays) && lookaheadDays > 0 ? lookaheadDays : DEFAULT_LOOKAHEAD_DAYS;
-  for (let day = 0; day < daysToSearch && slots.length < 5; day++) {
+
+  for (let day = 0; day < daysToSearch; day++) {
     const date = new Date(today);
     date.setDate(date.getDate() + day);
     const daySlots = await getAvailableSlots(date, durationMinutes || 60);
-    slots.push(...daySlots);
+    if (daySlots.length > 0) {
+      days.push({
+        label: formatDay(daySlots[0]),
+        slots: daySlots,
+      });
+    }
   }
-  const available = slots.slice(0, 5);
-  if (available.length === 0) {
-    await clearState(phone);
-    await sendText(phone, `Não há horários disponíveis nos próximos ${daysToSearch} dias. Entre em contato diretamente.`);
-    return;
-  }
-  await setState(phone, { ...state, step: 2, data: { ...state.data, slots: available } });
-  const list = available.map((s, i) => `${i + 1}. ${formatSlot(s)}`).join('\n');
-  await sendText(phone, `Horários disponíveis:\n\n${list}\n\nDigite o número do horário desejado ou "cancelar".`);
+
+  return { days, daysToSearch };
 }
 
+async function showAvailableDays(phone, state, durationMinutes) {
+  const { days, daysToSearch } = await collectAvailableDays(durationMinutes);
+  const availableDays = days.slice(0, 7);
+  if (availableDays.length === 0) {
+    await clearState(phone);
+    await sendText(phone, `Nao ha horarios disponiveis nos proximos ${daysToSearch} dias. Entre em contato diretamente.`);
+    return;
+  }
+
+  await setState(phone, { ...state, step: 1, data: { ...state.data, days: availableDays } });
+  const list = availableDays.map((d, i) => `${i + 1}. ${d.label}`).join('\n');
+  await sendText(phone, `Escolha o dia da reuniao:\n\n${list}\n\nDigite o numero do dia desejado ou "cancelar".`);
+}
+
+async function showSlotsForDay(phone, state, dayOption) {
+  const slots = dayOption.slots;
+  await setState(phone, { ...state, step: 2, data: { ...state.data, selectedDay: dayOption.label, slots } });
+  const list = slots.map((s, i) => `${i + 1}. ${formatTime(s)}`).join('\n');
+  await sendText(phone, `Horarios disponiveis para ${dayOption.label}:\n\n${list}\n\nDigite o numero do horario desejado ou "cancelar".`);
+}
 async function handleSchedulingFlow(phone, state, text) {
   if (text?.toLowerCase() === 'cancelar') {
     await clearState(phone);
@@ -266,18 +329,29 @@ async function handleSchedulingFlow(phone, state, text) {
             duration: DEFAULT_DURATION_MINUTES,
           },
         };
-    await showAvailableSlots(phone, newState, newState.data.duration);
+    await showAvailableDays(phone, newState, newState.data.duration);
     return;
   }
 
   if (state.step === 1) {
+    if (state.data.days) {
+      const idx = parseInt(text, 10) - 1;
+      const dayOption = state.data.days?.[idx];
+      if (!dayOption) {
+        await sendText(phone, 'Opcao invalida. Digite o numero do dia ou "cancelar".');
+        return;
+      }
+      await showSlotsForDay(phone, state, dayOption);
+      return;
+    }
+
     const newState = {
       flow: 'scheduling',
       step: 2,
       data: { ...state.data, service: getAppointmentTitle(text) },
     };
     await setState(phone, newState);
-    await showAvailableSlots(phone, newState, DEFAULT_DURATION_MINUTES);
+    await showAvailableDays(phone, newState, DEFAULT_DURATION_MINUTES);
     return;
   }
 
@@ -285,11 +359,11 @@ async function handleSchedulingFlow(phone, state, text) {
     const idx = parseInt(text, 10) - 1;
     const slot = state.data.slots?.[idx];
     if (!slot) {
-      await sendText(phone, 'Opção inválida. Digite o número do horário ou "cancelar".');
+      await sendText(phone, 'Opcao invalida. Digite o numero do horario ou "cancelar".');
       return;
     }
     await setState(phone, { flow: 'scheduling', step: 3, data: { ...state.data, slot } });
-    await sendText(phone, `Confirmar agendamento?\n*${state.data.service}*\n📅 ${formatSlot(slot)}\n\nDigite "sim" para confirmar ou "cancelar".`);
+    await sendText(phone, `Confirmar agendamento?\n*${state.data.service}*\n${formatSlot(slot)}\n\nDigite "sim" para confirmar ou "cancelar".`);
     return;
   }
 
@@ -303,7 +377,7 @@ async function handleSchedulingFlow(phone, state, text) {
     const eventId = await createAppointment(phone, service, slot, duration || 60, contactName);
     await scheduleReminders(phone, slot, eventId);
     await clearState(phone);
-    await sendText(phone, `✅ Agendamento confirmado!\n*${service}*\n📅 ${formatSlot(slot)}\n\nAté lá! Você receberá lembretes.`);
+    await sendText(phone, `Agendamento confirmado!\n*${service}*\n${formatSlot(slot)}\n\nAte la! Voce recebera lembretes.`);
   }
 }
 

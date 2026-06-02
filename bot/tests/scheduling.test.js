@@ -60,6 +60,7 @@ process.env.GOOGLE_CALENDAR_ID = 'test@calendar.google.com';
 process.env.GOOGLE_APPLICATION_CREDENTIALS = '/fake/credentials.json';
 
 const {
+  getAvailableSlots,
   createAppointment,
   cancelAppointment,
   handleSchedulingFlow,
@@ -127,7 +128,7 @@ test('createAppointment usa título estável para pedido genérico de reunião',
   expect(mockEventsInsert).toHaveBeenCalledWith(
     expect.objectContaining({
       requestBody: expect.objectContaining({
-        summary: 'Reunião',
+        summary: 'Reuniao',
         description: expect.stringContaining('quero marcar uma reunião amanhã'),
       }),
     })
@@ -146,7 +147,7 @@ test('createAppointment inclui nome da pessoa no título da reunião simples', a
   expect(mockEventsInsert).toHaveBeenCalledWith(
     expect.objectContaining({
       requestBody: expect.objectContaining({
-        summary: 'Reunião - João Silva',
+        summary: 'Reuniao - João Silva',
         description: expect.stringContaining('Nome: João Silva'),
       }),
     })
@@ -158,7 +159,7 @@ test('getAppointmentTitle preserva serviço específico do catálogo', () => {
 });
 
 test('getAppointmentTitle monta reunião com nome quando serviço é genérico', () => {
-  expect(getAppointmentTitle('quero marcar uma reunião', 'Maria Souza')).toBe('Reunião - Maria Souza');
+  expect(getAppointmentTitle('quero marcar uma reuniao', 'Maria Souza')).toBe('Reuniao - Maria Souza');
 });
 
 test('normalizePersonName remove espaços extras', () => {
@@ -173,17 +174,37 @@ test('cancelAppointment deleta evento do Google Calendar', async () => {
   );
 });
 
+test('getAvailableSlots usa janela padrao de 07h a 18h no fuso de Sao Paulo', async () => {
+  mockGetCompanySettings.mockResolvedValue({ timezone: 'America/Sao_Paulo', business_hours: null });
+  mockEventsList.mockResolvedValue({ data: { items: [] } });
+
+  const slots = await getAvailableSlots(new Date('2099-06-03T12:00:00.000Z'), 60);
+  const firstSlot = slots[0].toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const lastSlot = slots[slots.length - 1].toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  expect(firstSlot).toBe('07:00');
+  expect(lastSlot).toBe('17:00');
+});
+
 test('handleSchedulingFlow step 0 sem service mostra slots para reunião simples', async () => {
   mockSetState.mockResolvedValue(undefined);
   mockSendText.mockResolvedValue(undefined);
   mockEventsList.mockResolvedValue({ data: { items: [] } });
   await handleSchedulingFlow('5511999999999', { flow: 'scheduling', step: 0, data: {} }, 'quero marcar uma reunião');
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('horário'));
+  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('Escolha o dia'));
   expect(mockSetState).toHaveBeenCalledWith(
     '5511999999999',
     expect.objectContaining({
-      step: 2,
-      data: expect.objectContaining({ service: 'Reunião', duration: 60 }),
+      step: 1,
+      data: expect.objectContaining({ service: 'Reuniao', duration: 60, days: expect.any(Array) }),
     })
   );
 });
@@ -197,7 +218,7 @@ test('handleSchedulingFlow step 0 com service pula para mostrar slots', async ()
     { flow: 'scheduling', step: 0, data: { service: 'Corte', duration: 60 } },
     'agendar'
   );
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('horário'));
+  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('Escolha o dia'));
 });
 
 test('handleSchedulingFlow step 1 salva serviço e mostra slots', async () => {
@@ -205,8 +226,32 @@ test('handleSchedulingFlow step 1 salva serviço e mostra slots', async () => {
   mockSendText.mockResolvedValue(undefined);
   mockEventsList.mockResolvedValue({ data: { items: [] } });
   await handleSchedulingFlow('5511999999999', { flow: 'scheduling', step: 1, data: {} }, 'Corte de cabelo');
-  expect(mockSetState).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ step: 2 }));
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('horário'));
+  expect(mockSetState).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ step: 1 }));
+  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('Escolha o dia'));
+});
+
+test('handleSchedulingFlow step 1 com dias mostra horarios do dia escolhido', async () => {
+  mockSetState.mockResolvedValue(undefined);
+  mockSendText.mockResolvedValue(undefined);
+  const slots = [
+    new Date('2099-06-03T10:00:00.000Z'),
+    new Date('2099-06-03T11:00:00.000Z'),
+  ];
+
+  await handleSchedulingFlow(
+    '5511999999999',
+    { flow: 'scheduling', step: 1, data: { service: 'Reuniao', duration: 60, days: [{ label: 'quarta-feira, 03/06', slots }] } },
+    '1'
+  );
+
+  expect(mockSetState).toHaveBeenCalledWith(
+    '5511999999999',
+    expect.objectContaining({
+      step: 2,
+      data: expect.objectContaining({ selectedDay: 'quarta-feira, 03/06', slots }),
+    })
+  );
+  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('Horarios disponiveis'));
 });
 
 test('handleSchedulingFlow step 3 com "sim" cria agendamento e limpa estado', async () => {
