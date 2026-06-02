@@ -61,7 +61,7 @@ services:
     build: ./bot
     restart: always
     ports:
-      - "3000:3000"
+      - "3002:3000"
     env_file:
       - .env
     environment:
@@ -75,8 +75,6 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
-    volumes:
-      - ./google-credentials.json:/app/google-credentials.json:ro
     networks:
       - bot-net
 
