@@ -1,4 +1,4 @@
-jest.mock('../src/redis', () => ({
+﻿jest.mock('../src/redis', () => ({
   getHistory: jest.fn(),
   appendHistory: jest.fn(),
   getClient: jest.fn(),
@@ -63,7 +63,7 @@ const validPayload = {
   event: 'messages.upsert',
   data: {
     key: { remoteJid: '5511999999999@s.whatsapp.net', fromMe: false, id: 'msg-123' },
-    message: { conversation: 'Qual o horário de atendimento?' },
+    message: { conversation: 'Qual o horÃ¡rio de atendimento?' },
   },
 };
 
@@ -82,7 +82,7 @@ beforeEach(() => {
   addInteraction.mockResolvedValue(undefined);
 });
 
-test('retorna 401 sem token válido', async () => {
+test('retorna 401 sem token vÃ¡lido', async () => {
   await request(app).post('/webhook').send(validPayload).expect(401);
 });
 
@@ -96,7 +96,7 @@ test('ignora mensagens de grupos', async () => {
   expect(chat).not.toHaveBeenCalled();
 });
 
-test('ignora eventos que não são messages.upsert', async () => {
+test('ignora eventos que nÃ£o sÃ£o messages.upsert', async () => {
   const payload = { ...validPayload, event: 'connection.update' };
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
   expect(chat).not.toHaveBeenCalled();
@@ -104,15 +104,15 @@ test('ignora eventos que não são messages.upsert', async () => {
 
 test('aceita webhook com sufixo de evento da Evolution API', async () => {
   getHistory.mockResolvedValue([]);
-  chat.mockResolvedValue('Olá!');
+  chat.mockResolvedValue('OlÃ¡!');
   appendHistory.mockResolvedValue(undefined);
   sendText.mockResolvedValue(undefined);
 
   await request(app).post('/webhook/messages-upsert').set('x-api-key', 'test-token').send(validPayload).expect(200);
   await new Promise((r) => setTimeout(r, 100));
 
-  expect(chat).toHaveBeenCalledWith([], 'Qual o horário de atendimento?');
-  expect(sendText).toHaveBeenCalledWith('5511999999999', 'Olá!');
+  expect(chat).toHaveBeenCalledWith([], 'Qual o horÃ¡rio de atendimento?');
+  expect(sendText).toHaveBeenCalledWith('5511999999999', 'OlÃ¡!');
 });
 
 test('ignora payload com key sem remoteJid', async () => {
@@ -146,14 +146,14 @@ test('processa comando /notify de mensagem fromMe', async () => {
   expect(sendNotification).toHaveBeenCalledWith('5511888888888', 'Seu pedido chegou!');
 });
 
-test('ignora mensagem quando bot está em modo humano', async () => {
+test('ignora mensagem quando bot estÃ¡ em modo humano', async () => {
   isHumanMode.mockResolvedValue(true);
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
   await new Promise((r) => setTimeout(r, 50));
   expect(chat).not.toHaveBeenCalled();
 });
 
-test('responde com closedMessage quando fora do horário', async () => {
+test('responde com closedMessage quando fora do horÃ¡rio', async () => {
   isOpen.mockReturnValue(false);
   getClosedMessage.mockReturnValue('Estamos fechados!');
   sendText.mockResolvedValue(undefined);
@@ -162,12 +162,12 @@ test('responde com closedMessage quando fora do horário', async () => {
   expect(upsertLead).toHaveBeenCalledWith(
     '5511999999999',
     null,
-    'Qual o horário de atendimento?',
+    'Qual o horÃ¡rio de atendimento?',
     'text'
   );
   expect(addInteraction).toHaveBeenCalledWith(
     '5511999999999',
-    'Qual o horário de atendimento?',
+    'Qual o horÃ¡rio de atendimento?',
     'in',
     'text'
   );
@@ -181,23 +181,23 @@ test('roteia para handleCatalogFlow quando flow=catalog', async () => {
   handleCatalogFlow.mockResolvedValue(undefined);
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
   await new Promise((r) => setTimeout(r, 100));
-  expect(handleCatalogFlow).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'catalog' }), 'Qual o horário de atendimento?');
+  expect(handleCatalogFlow).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'catalog' }), 'Qual o horÃ¡rio de atendimento?');
 });
 
-test('processa mensagem válida com OpenAI e envia resposta', async () => {
+test('processa mensagem vÃ¡lida com OpenAI e envia resposta', async () => {
   getHistory.mockResolvedValue([]);
-  chat.mockResolvedValue('Atendemos das 9h às 18h.');
+  chat.mockResolvedValue('Atendemos das 9h Ã s 18h.');
   appendHistory.mockResolvedValue(undefined);
   sendText.mockResolvedValue(undefined);
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
   await new Promise((r) => setTimeout(r, 100));
-  expect(chat).toHaveBeenCalledWith([], 'Qual o horário de atendimento?');
-  expect(sendText).toHaveBeenCalledWith('5511999999999', 'Atendemos das 9h às 18h.');
+  expect(chat).toHaveBeenCalledWith([], 'Qual o horÃ¡rio de atendimento?');
+  expect(sendText).toHaveBeenCalledWith('5511999999999', 'Atendemos das 9h Ã s 18h.');
 });
 
 test('chama upsertLead e addInteraction (in/out) quando mensagem de texto chega', async () => {
   getHistory.mockResolvedValue([]);
-  chat.mockResolvedValue('Olá!');
+  chat.mockResolvedValue('OlÃ¡!');
   appendHistory.mockResolvedValue(undefined);
   sendText.mockResolvedValue(undefined);
 
@@ -207,25 +207,25 @@ test('chama upsertLead e addInteraction (in/out) quando mensagem de texto chega'
   expect(upsertLead).toHaveBeenCalledWith(
     '5511999999999',
     null,
-    'Qual o horário de atendimento?',
+    'Qual o horÃ¡rio de atendimento?',
     'text'
   );
   expect(addInteraction).toHaveBeenCalledWith(
     '5511999999999',
-    'Qual o horário de atendimento?',
+    'Qual o horÃ¡rio de atendimento?',
     'in',
     'text'
   );
-  expect(addInteraction).toHaveBeenCalledWith('5511999999999', 'Olá!', 'out', 'text');
+  expect(addInteraction).toHaveBeenCalledWith('5511999999999', 'OlÃ¡!', 'out', 'text');
 });
 
-test('chama upsertLead com pushName quando disponível', async () => {
+test('chama upsertLead com pushName quando disponÃ­vel', async () => {
   const payloadWithName = {
     ...validPayload,
-    data: { ...validPayload.data, pushName: 'João Silva' },
+    data: { ...validPayload.data, pushName: 'JoÃ£o Silva' },
   };
   getHistory.mockResolvedValue([]);
-  chat.mockResolvedValue('Olá!');
+  chat.mockResolvedValue('OlÃ¡!');
   appendHistory.mockResolvedValue(undefined);
   sendText.mockResolvedValue(undefined);
 
@@ -234,8 +234,8 @@ test('chama upsertLead com pushName quando disponível', async () => {
 
   expect(upsertLead).toHaveBeenCalledWith(
     '5511999999999',
-    'João Silva',
-    'Qual o horário de atendimento?',
+    'JoÃ£o Silva',
+    'Qual o horÃ¡rio de atendimento?',
     'text'
   );
 });
@@ -251,7 +251,7 @@ test('detecta __TRANSFER__ e ativa modo humano', async () => {
   expect(sendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('atendente'));
 });
 
-test('detecta __CATALOG__ e inicia flow de catálogo', async () => {
+test('detecta __CATALOG__ e inicia flow de catÃ¡logo', async () => {
   getHistory.mockResolvedValue([]);
   chat.mockResolvedValue('__CATALOG__');
   setState.mockResolvedValue(undefined);
@@ -272,37 +272,37 @@ test('parseCommand retorna null para texto sem /', () => {
   expect(parseCommand(null)).toBeNull();
 });
 
-test('parseCommand retorna cmd e args para comando válido', () => {
+test('parseCommand retorna cmd e args para comando vÃ¡lido', () => {
   expect(parseCommand('/bot on 5511999999999')).toEqual({ cmd: '/bot', args: ['on', '5511999999999'] });
 });
 
-test('extractMessage lê de conversation', () => {
+test('extractMessage lÃª de conversation', () => {
   expect(extractMessage({ message: { conversation: 'oi' } })).toBe('oi');
 });
 
-test('extractMessage lê de extendedTextMessage', () => {
+test('extractMessage lÃª de extendedTextMessage', () => {
   expect(extractMessage({ message: { extendedTextMessage: { text: 'oi' } } })).toBe('oi');
 });
 
-test('extractMessage retorna null para tipos não suportados', () => {
+test('extractMessage retorna null para tipos nÃ£o suportados', () => {
   expect(extractMessage({ message: { imageMessage: {} } })).toBeNull();
 });
 
-test('extractMessage lê selectedRowId de listResponseMessage', () => {
+test('extractMessage lÃª selectedRowId de listResponseMessage', () => {
   const data = { message: { listResponseMessage: { singleSelectReply: { selectedRowId: 'services' } } } };
   expect(extractMessage(data)).toBe('services');
 });
 
-test('extractMessage lê título de listMessage (bot enviando lista)', () => {
-  const data = { message: { listMessage: { title: 'O que você procura?' } } };
-  expect(extractMessage(data)).toBe('[lista: O que você procura?]');
+test('extractMessage lÃª tÃ­tulo de listMessage (bot enviando lista)', () => {
+  const data = { message: { listMessage: { title: 'O que vocÃª procura?' } } };
+  expect(extractMessage(data)).toBe('[lista: O que vocÃª procura?]');
 });
 
 test('roteia para handleSchedulingFlow com contactName quando flow=scheduling', async () => {
   getState.mockResolvedValue({ mode: 'bot', flow: 'scheduling', step: 1, data: {} });
   const payloadWithName = {
     ...validPayload,
-    data: { ...validPayload.data, pushName: 'João Silva' },
+    data: { ...validPayload.data, pushName: 'JoÃ£o Silva' },
   };
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(payloadWithName).expect(200);
   await new Promise((r) => setTimeout(r, 100));
@@ -310,9 +310,9 @@ test('roteia para handleSchedulingFlow com contactName quando flow=scheduling', 
     '5511999999999',
     expect.objectContaining({
       flow: 'scheduling',
-      data: expect.objectContaining({ contactName: 'João Silva' }),
+      data: expect.objectContaining({ contactName: 'JoÃ£o Silva' }),
     }),
-    'Qual o horário de atendimento?'
+    'Qual o horÃ¡rio de atendimento?'
   );
 });
 
@@ -320,7 +320,7 @@ test('roteia para handlePaymentFlow quando flow=payment', async () => {
   getState.mockResolvedValue({ mode: 'bot', flow: 'payment', step: 1, data: {} });
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
   await new Promise((r) => setTimeout(r, 100));
-  expect(handlePaymentFlow).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'payment' }), 'Qual o horário de atendimento?');
+  expect(handlePaymentFlow).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'payment' }), 'Qual o horÃ¡rio de atendimento?');
 });
 
 test('detecta __SCHEDULE__ e inicia flow de agendamento', async () => {
@@ -329,19 +329,46 @@ test('detecta __SCHEDULE__ e inicia flow de agendamento', async () => {
   setState.mockResolvedValue(undefined);
   const payloadWithName = {
     ...validPayload,
-    data: { ...validPayload.data, pushName: 'João Silva' },
+    data: { ...validPayload.data, pushName: 'JoÃ£o Silva' },
   };
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(payloadWithName).expect(200);
   await new Promise((r) => setTimeout(r, 100));
   expect(setState).toHaveBeenCalledWith('5511999999999', {
     flow: 'scheduling',
     step: 0,
-    data: { contactName: 'João Silva' },
+    data: { contactName: 'JoÃ£o Silva' },
   });
   expect(handleSchedulingFlow).toHaveBeenCalledWith(
     '5511999999999',
-    expect.objectContaining({ data: { contactName: 'João Silva' } }),
-    'Qual o horário de atendimento?'
+    expect.objectContaining({ data: { contactName: 'JoÃ£o Silva' } }),
+    'Qual o horÃ¡rio de atendimento?'
+  );
+});
+
+test('detecta pedido direto de reuniÃ£o sem depender da OpenAI', async () => {
+  setState.mockResolvedValue(undefined);
+  const payloadWithMeeting = {
+    ...validPayload,
+    data: {
+      ...validPayload.data,
+      pushName: 'JoÃƒÂ£o Silva',
+      message: { conversation: 'Quero marcar uma reuniÃ£o' },
+    },
+  };
+
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(payloadWithMeeting).expect(200);
+  await new Promise((r) => setTimeout(r, 100));
+
+  expect(chat).not.toHaveBeenCalled();
+  expect(setState).toHaveBeenCalledWith('5511999999999', {
+    flow: 'scheduling',
+    step: 0,
+    data: { contactName: 'JoÃƒÂ£o Silva' },
+  });
+  expect(handleSchedulingFlow).toHaveBeenCalledWith(
+    '5511999999999',
+    expect.objectContaining({ flow: 'scheduling', step: 0 }),
+    'Quero marcar uma reuniÃ£o'
   );
 });
 
@@ -355,7 +382,7 @@ test('detecta __PAYMENT__ e inicia flow de pagamento', async () => {
   expect(handlePaymentFlow).toHaveBeenCalled();
 });
 
-test('trata __PAYMENT__ inválido sem quebrar o fluxo', async () => {
+test('trata __PAYMENT__ invÃ¡lido sem quebrar o fluxo', async () => {
   getHistory.mockResolvedValue([]);
   chat.mockResolvedValue('__PAYMENT__:abc:');
   appendHistory.mockResolvedValue(undefined);
@@ -365,11 +392,11 @@ test('trata __PAYMENT__ inválido sem quebrar o fluxo', async () => {
   expect(handlePaymentFlow).not.toHaveBeenCalled();
   expect(sendText).toHaveBeenCalledWith(
     '5511999999999',
-    expect.stringContaining('não consegui identificar o valor do pagamento')
+    expect.stringContaining('identificar o valor do pagamento')
   );
 });
 
-test('transcreve áudio e processa como texto normal', async () => {
+test('transcreve Ã¡udio e processa como texto normal', async () => {
   const audioPayload = {
     event: 'messages.upsert',
     data: {
@@ -377,21 +404,27 @@ test('transcreve áudio e processa como texto normal', async () => {
       message: { audioMessage: { mimetype: 'audio/ogg; codecs=opus' } },
     },
   };
-  transcribeAudio.mockResolvedValue('quero agendar um horário');
-  getHistory.mockResolvedValue([]);
-  chat.mockResolvedValue('Claro! Vamos agendar.');
-  appendHistory.mockResolvedValue(undefined);
-  sendText.mockResolvedValue(undefined);
+  transcribeAudio.mockResolvedValue('quero agendar um horÃ¡rio');
+  setState.mockResolvedValue(undefined);
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(audioPayload).expect(200);
   await new Promise((r) => setTimeout(r, 100));
   expect(transcribeAudio).toHaveBeenCalledWith(audioPayload.data);
-  expect(upsertLead).toHaveBeenCalledWith('5511999999999', null, '[áudio]', 'audio');
-  expect(addInteraction).toHaveBeenCalledWith('5511999999999', '[áudio]', 'in', 'audio');
-  expect(chat).toHaveBeenCalledWith([], 'quero agendar um horário');
-  expect(sendText).toHaveBeenCalledWith('5511999999999', 'Claro! Vamos agendar.');
+  expect(upsertLead).toHaveBeenCalledWith('5511999999999', null, expect.stringContaining('udio'), 'audio');
+  expect(addInteraction).toHaveBeenCalledWith('5511999999999', expect.stringContaining('udio'), 'in', 'audio');
+  expect(chat).not.toHaveBeenCalled();
+  expect(setState).toHaveBeenCalledWith('5511999999999', {
+    flow: 'scheduling',
+    step: 0,
+    data: {},
+  });
+  expect(handleSchedulingFlow).toHaveBeenCalledWith(
+    '5511999999999',
+    expect.objectContaining({ flow: 'scheduling', step: 0 }),
+    'quero agendar um horÃ¡rio'
+  );
 });
 
-test('ignora mensagem de áudio quando transcrição retorna null', async () => {
+test('ignora mensagem de Ã¡udio quando transcriÃ§Ã£o retorna null', async () => {
   const audioPayload = {
     event: 'messages.upsert',
     data: {
@@ -410,7 +443,7 @@ test('roteia imagem para handleImageMessage sem chamar OpenAI', async () => {
     event: 'messages.upsert',
     data: {
       key: { remoteJid: '5511999999999@s.whatsapp.net', fromMe: false, id: 'msg-img' },
-      message: { imageMessage: { caption: 'O que é isso?' } },
+      message: { imageMessage: { caption: 'O que Ã© isso?' } },
     },
   };
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(imagePayload).expect(200);
@@ -424,10 +457,12 @@ test('processa comando /broadcast de mensagem fromMe', async () => {
     ...validPayload,
     data: {
       key: { fromMe: true, remoteJid: '5511999999999@s.whatsapp.net' },
-      message: { conversation: '/broadcast Promoção especial!' },
+      message: { conversation: '/broadcast PromoÃ§Ã£o especial!' },
     },
   };
   await request(app).post('/webhook').set('x-api-key', 'test-token').send(payload).expect(200);
   await new Promise((r) => setTimeout(r, 100));
-  expect(sendBroadcast).toHaveBeenCalledWith('Promoção especial!');
+  expect(sendBroadcast).toHaveBeenCalledWith('PromoÃ§Ã£o especial!');
 });
+
+

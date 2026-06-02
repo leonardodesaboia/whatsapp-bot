@@ -78,6 +78,8 @@ async function handleCommand(parsed, res) {
 
 const FLOW_ESCAPE = /^(oi|olá|ola|oii|oiii|bom dia|boa tarde|boa noite|menu|início|inicio|começo|comeco|ajuda|help|voltar|sair|exit|tudo bem|tudo bom|ei|hey|hello)[\s!?.]*$/i;
 
+const DIRECT_SCHEDULE_INTENT = /\b(agendar|marcar|reservar|reuni[aã]o|call)\b/i;
+
 async function processMessage(phone, text, contactName) {
   const state = await getState(phone);
   if (contactName && !state.data?.contactName) {
@@ -99,6 +101,17 @@ async function processMessage(phone, text, contactName) {
   }
   if (state.flow === 'payment') {
     await handlePaymentFlow(phone, state, text);
+    return null;
+  }
+
+  if (DIRECT_SCHEDULE_INTENT.test(text || '')) {
+    const schedulingState = {
+      flow: 'scheduling',
+      step: 0,
+      data: contactName ? { contactName } : {},
+    };
+    await setState(phone, schedulingState);
+    await handleSchedulingFlow(phone, schedulingState, text);
     return null;
   }
 
