@@ -65,10 +65,13 @@ const {
   handleSchedulingFlow,
   getAppointmentTitle,
   normalizePersonName,
+  loadGoogleCredentials,
 } = require('../src/scheduling');
 
 beforeEach(() => {
   jest.clearAllMocks();
+  delete process.env.GOOGLE_CREDENTIALS_JSON;
+  delete process.env.GOOGLE_CREDENTIALS_BASE64;
   mockGetCompanySettings.mockResolvedValue({
     timezone: 'America/Sao_Paulo',
     business_hours: {
@@ -89,6 +92,27 @@ test('createAppointment insere evento no Google Calendar e retorna eventId', asy
   const id = await createAppointment('5511999999999', 'Corte', new Date('2026-06-10T10:00:00'), 60);
   expect(mockEventsInsert).toHaveBeenCalled();
   expect(id).toBe('evt-123');
+});
+
+test('loadGoogleCredentials carrega credenciais de JSON string', () => {
+  process.env.GOOGLE_CREDENTIALS_JSON = JSON.stringify({
+    client_email: 'bot@test.iam.gserviceaccount.com',
+    private_key: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n',
+  });
+  expect(loadGoogleCredentials()).toEqual(
+    expect.objectContaining({ client_email: 'bot@test.iam.gserviceaccount.com' })
+  );
+});
+
+test('loadGoogleCredentials carrega credenciais de Base64', () => {
+  const json = JSON.stringify({
+    client_email: 'bot@test.iam.gserviceaccount.com',
+    private_key: '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n',
+  });
+  process.env.GOOGLE_CREDENTIALS_BASE64 = Buffer.from(json, 'utf8').toString('base64');
+  expect(loadGoogleCredentials()).toEqual(
+    expect.objectContaining({ client_email: 'bot@test.iam.gserviceaccount.com' })
+  );
 });
 
 test('createAppointment usa título estável para pedido genérico de reunião', async () => {

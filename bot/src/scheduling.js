@@ -35,13 +35,21 @@ function getAppointmentDescription(phone, service, contactName) {
   return lines.join('\n');
 }
 
+function loadGoogleCredentials() {
+  const raw = process.env.GOOGLE_CREDENTIALS_BASE64
+    ? Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64, 'base64').toString('utf8')
+    : process.env.GOOGLE_CREDENTIALS_JSON;
+  if (!raw) return null;
+
+  const credentials = JSON.parse(raw);
+  return credentials.client_email && credentials.private_key ? credentials : null;
+}
+
 async function getAuth() {
   const authConfig = { scopes: ['https://www.googleapis.com/auth/calendar'] };
-  if (process.env.GOOGLE_CREDENTIALS_JSON) {
-    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
-    if (credentials.client_email && credentials.private_key) {
-      authConfig.credentials = credentials;
-    }
+  const credentials = loadGoogleCredentials();
+  if (credentials) {
+    authConfig.credentials = credentials;
   }
   if (!authConfig.credentials) {
     authConfig.keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -287,4 +295,5 @@ module.exports = {
   handleSchedulingFlow,
   getAppointmentTitle,
   normalizePersonName,
+  loadGoogleCredentials,
 };
