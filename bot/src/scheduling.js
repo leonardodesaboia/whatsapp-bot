@@ -7,12 +7,43 @@ const { getCompanySettings } = require('./config');
 
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 const DAY_MAP = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DEFAULT_MEETING_SERVICE = 'Reunião';
+const DEFAULT_DURATION_MINUTES = 60;
+const GENERIC_MEETING_INTENT = /\b(agendar|agenda|marcar|reuni[aã]o|call|conversa|hor[aá]rio|reserva)\b/i;
+
+function normalizePersonName(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ');
+}
+
+function getAppointmentTitle(service, contactName) {
+  const value = String(service || '').trim();
+  const person = normalizePersonName(contactName);
+  if (!value || GENERIC_MEETING_INTENT.test(value)) {
+    return person ? `${DEFAULT_MEETING_SERVICE} - ${person}` : DEFAULT_MEETING_SERVICE;
+  }
+  return value;
+}
+
+function getAppointmentDescription(phone, service, contactName) {
+  const requested = String(service || '').trim();
+  const lines = [`WhatsApp: ${phone}`];
+  const person = normalizePersonName(contactName);
+  if (person) lines.push(`Nome: ${person}`);
+  if (requested && requested !== getAppointmentTitle(requested, contactName)) {
+    lines.push(`Solicitação original: ${requested}`);
+  }
+  return lines.join('\n');
+}
 
 async function getAuth() {
   const authConfig = { scopes: ['https://www.googleapis.com/auth/calendar'] };
   if (process.env.GOOGLE_CREDENTIALS_JSON) {
-    authConfig.credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
-  } else {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+    if (credentials.client_email && credentials.private_key) {
+      authConfig.credentials = credentials;
+    }
+  }
+  if (!authConfig.credentials) {
     authConfig.keyFile = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   }
   const auth = new google.auth.GoogleAuth(authConfig);
@@ -92,16 +123,17 @@ async function getAvailableSlots(date, durationMinutes) {
   return slots;
 }
 
-async function createAppointment(phone, service, datetime, durationMinutes) {
+async function createAppointment(phone, service, datetime, durationMinutes, contactName) {
   const auth = await getAuth();
   const cal = google.calendar('v3');
   const end = new Date(new Date(datetime).getTime() + durationMinutes * 60000);
+  const title = getAppointmentTitle(service, contactName);
   const response = await cal.events.insert({
     auth,
     calendarId: CALENDAR_ID,
     requestBody: {
-      summary: service,
-      description: `WhatsApp: ${phone}`,
+      summary: title,
+      description: getAppointmentDescription(phone, service, contactName),
       start: { dateTime: new Date(datetime).toISOString() },
       end: { dateTime: end.toISOString() },
     },
@@ -194,19 +226,29 @@ async function handleSchedulingFlow(phone, state, text) {
   }
 
   if (state.step === 0) {
-    if (state.data.service) {
-      await showAvailableSlots(phone, state, state.data.duration);
-      return;
-    }
-    await setState(phone, { flow: 'scheduling', step: 1, data: {} });
-    await sendText(phone, 'Qual serviço você deseja agendar?');
+    const newState = state.data.service
+      ? state
+      : {
+          flow: 'scheduling',
+          step: 0,
+          data: {
+            ...state.data,
+            service: DEFAULT_MEETING_SERVICE,
+            duration: DEFAULT_DURATION_MINUTES,
+          },
+        };
+    await showAvailableSlots(phone, newState, newState.data.duration);
     return;
   }
 
   if (state.step === 1) {
-    const newState = { flow: 'scheduling', step: 2, data: { service: text } };
+    const newState = {
+      flow: 'scheduling',
+      step: 2,
+      data: { ...state.data, service: getAppointmentTitle(text) },
+    };
     await setState(phone, newState);
-    await showAvailableSlots(phone, newState, 60);
+    await showAvailableSlots(phone, newState, DEFAULT_DURATION_MINUTES);
     return;
   }
 
@@ -228,8 +270,8 @@ async function handleSchedulingFlow(phone, state, text) {
       await sendText(phone, 'Agendamento cancelado. Como posso ajudar?');
       return;
     }
-    const { service, slot, duration } = state.data;
-    const eventId = await createAppointment(phone, service, slot, duration || 60);
+    const { service, slot, duration, contactName } = state.data;
+    const eventId = await createAppointment(phone, service, slot, duration || 60, contactName);
     await scheduleReminders(phone, slot, eventId);
     await clearState(phone);
     await sendText(phone, `✅ Agendamento confirmado!\n*${service}*\n📅 ${formatSlot(slot)}\n\nAté lá! Você receberá lembretes.`);
@@ -243,4 +285,6 @@ module.exports = {
   scheduleReminders,
   rescheduleAllReminders,
   handleSchedulingFlow,
+  getAppointmentTitle,
+  normalizePersonName,
 };

@@ -2,12 +2,14 @@ services:
   evolution-api:
     image: evoapicloud/evolution-api:latest
     restart: always
+    ports:
+      - "8080:8080"
     env_file:
       - .env
     environment:
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - DATABASE_CONNECTION_URI=${EVOLUTION_DATABASE_URL}
       - CACHE_REDIS_ENABLED=true
       - CACHE_REDIS_URI=redis://redis:6379
       - CACHE_REDIS_PREFIX_KEY=evolution
@@ -58,6 +60,8 @@ services:
   bot:
     build: ./bot
     restart: always
+    ports:
+      - "3000:3000"
     env_file:
       - .env
     environment:
@@ -65,22 +69,27 @@ services:
       - EVOLUTION_API_URL=http://evolution-api:8080
       - REDIS_URL=redis://redis:6379
       - BOT_WEBHOOK_URL=${BOT_WEBHOOK_URL:-http://bot:3000}
-      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/crm
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       evolution-api:
         condition: service_started
       redis:
         condition: service_healthy
+    volumes:
+      - ./google-credentials.json:/app/google-credentials.json:ro
     networks:
       - bot-net
 
   crm:
     build: ./crm
     restart: always
+    ports:
+      - "3001:3001"
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/crm
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3001}
       ADMIN_EMAIL: ${ADMIN_EMAIL}

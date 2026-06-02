@@ -78,8 +78,11 @@ async function handleCommand(parsed, res) {
 
 const FLOW_ESCAPE = /^(oi|olá|ola|oii|oiii|bom dia|boa tarde|boa noite|menu|início|inicio|começo|comeco|ajuda|help|voltar|sair|exit|tudo bem|tudo bom|ei|hey|hello)[\s!?.]*$/i;
 
-async function processMessage(phone, text) {
+async function processMessage(phone, text, contactName) {
   const state = await getState(phone);
+  if (contactName && !state.data?.contactName) {
+    state.data = { ...state.data, contactName };
+  }
 
   if (state.flow && FLOW_ESCAPE.test(text?.trim())) {
     await clearState(phone);
@@ -112,8 +115,13 @@ async function processMessage(phone, text) {
     return null;
   }
   if (reply === '__SCHEDULE__') {
-    await setState(phone, { flow: 'scheduling', step: 0, data: {} });
-    await handleSchedulingFlow(phone, { flow: 'scheduling', step: 0, data: {} }, text);
+    const schedulingState = {
+      flow: 'scheduling',
+      step: 0,
+      data: contactName ? { contactName } : {},
+    };
+    await setState(phone, schedulingState);
+    await handleSchedulingFlow(phone, schedulingState, text);
     return null;
   }
   if (reply?.startsWith('__PAYMENT__:')) {
@@ -147,6 +155,7 @@ async function handleWebhook(req, res) {
     if (command) return handleCommand(command, res);
     if (isPrivateChat(data.key.remoteJid)) {
       const phone = extractPhone(data);
+      if (!phone) return res.sendStatus(200);
       if (data.source && data.source !== 'api') {
         // operador digitando manualmente → pausa o bot
         const pauseMins = parseInt(process.env.HUMAN_REPLY_PAUSE_MINUTES || '10', 10);
@@ -162,7 +171,6 @@ async function handleWebhook(req, res) {
   if (event !== 'messages.upsert') return res.sendStatus(200);
   if (!data?.key) return res.sendStatus(200);
   if (!isPrivateChat(data.key.remoteJid)) return res.sendStatus(200);
-  console.log('[startup-filter] ts:', data.messageTimestamp, 'startup:', STARTUP_TIMESTAMP);
   if (data.messageTimestamp && data.messageTimestamp < STARTUP_TIMESTAMP) return res.sendStatus(200);
 
   const text = extractMessage(data);
@@ -215,7 +223,7 @@ async function handleWebhook(req, res) {
         if (!messageText) return;
       }
 
-      const reply = await processMessage(phone, messageText);
+      const reply = await processMessage(phone, messageText, pushName);
       if (reply) {
         await sendText(phone, reply);
         await addInteraction(phone, reply, 'out', 'text');

@@ -59,7 +59,13 @@ jest.mock('../src/config', () => ({
 process.env.GOOGLE_CALENDAR_ID = 'test@calendar.google.com';
 process.env.GOOGLE_APPLICATION_CREDENTIALS = '/fake/credentials.json';
 
-const { createAppointment, cancelAppointment, handleSchedulingFlow } = require('../src/scheduling');
+const {
+  createAppointment,
+  cancelAppointment,
+  handleSchedulingFlow,
+  getAppointmentTitle,
+  normalizePersonName,
+} = require('../src/scheduling');
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -85,6 +91,55 @@ test('createAppointment insere evento no Google Calendar e retorna eventId', asy
   expect(id).toBe('evt-123');
 });
 
+test('createAppointment usa título estável para pedido genérico de reunião', async () => {
+  mockEventsInsert.mockResolvedValue({ data: { id: 'evt-123' } });
+  await createAppointment(
+    '5511999999999',
+    'quero marcar uma reunião amanhã',
+    new Date('2026-06-10T10:00:00'),
+    60
+  );
+  expect(mockEventsInsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      requestBody: expect.objectContaining({
+        summary: 'Reunião',
+        description: expect.stringContaining('quero marcar uma reunião amanhã'),
+      }),
+    })
+  );
+});
+
+test('createAppointment inclui nome da pessoa no título da reunião simples', async () => {
+  mockEventsInsert.mockResolvedValue({ data: { id: 'evt-123' } });
+  await createAppointment(
+    '5511999999999',
+    'Reunião',
+    new Date('2026-06-10T10:00:00'),
+    60,
+    ' João   Silva '
+  );
+  expect(mockEventsInsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      requestBody: expect.objectContaining({
+        summary: 'Reunião - João Silva',
+        description: expect.stringContaining('Nome: João Silva'),
+      }),
+    })
+  );
+});
+
+test('getAppointmentTitle preserva serviço específico do catálogo', () => {
+  expect(getAppointmentTitle('Corte de cabelo')).toBe('Corte de cabelo');
+});
+
+test('getAppointmentTitle monta reunião com nome quando serviço é genérico', () => {
+  expect(getAppointmentTitle('quero marcar uma reunião', 'Maria Souza')).toBe('Reunião - Maria Souza');
+});
+
+test('normalizePersonName remove espaços extras', () => {
+  expect(normalizePersonName('  Maria   Souza  ')).toBe('Maria Souza');
+});
+
 test('cancelAppointment deleta evento do Google Calendar', async () => {
   mockEventsDelete.mockResolvedValue({});
   await cancelAppointment('evt-123');
@@ -93,12 +148,19 @@ test('cancelAppointment deleta evento do Google Calendar', async () => {
   );
 });
 
-test('handleSchedulingFlow step 0 sem service pede nome do serviço', async () => {
+test('handleSchedulingFlow step 0 sem service mostra slots para reunião simples', async () => {
   mockSetState.mockResolvedValue(undefined);
   mockSendText.mockResolvedValue(undefined);
-  await handleSchedulingFlow('5511999999999', { flow: 'scheduling', step: 0, data: {} }, 'quero agendar');
-  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('serviço'));
-  expect(mockSetState).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ step: 1 }));
+  mockEventsList.mockResolvedValue({ data: { items: [] } });
+  await handleSchedulingFlow('5511999999999', { flow: 'scheduling', step: 0, data: {} }, 'quero marcar uma reunião');
+  expect(mockSendText).toHaveBeenCalledWith('5511999999999', expect.stringContaining('horário'));
+  expect(mockSetState).toHaveBeenCalledWith(
+    '5511999999999',
+    expect.objectContaining({
+      step: 2,
+      data: expect.objectContaining({ service: 'Reunião', duration: 60 }),
+    })
+  );
 });
 
 test('handleSchedulingFlow step 0 com service pula para mostrar slots', async () => {

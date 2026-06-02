@@ -68,6 +68,13 @@ test('buildSystemPrompt instrui o bot a responder só sobre a empresa', async ()
   expect(prompt.toLowerCase()).toMatch(/responda apenas|somente/);
 });
 
+test('buildSystemPrompt permite agendamento simples de reunião', async () => {
+  const prompt = await buildSystemPrompt();
+  expect(prompt).toContain('__SCHEDULE__');
+  expect(prompt.toLowerCase()).toContain('reunião');
+  expect(prompt.toLowerCase()).toContain('não exija produto');
+});
+
 test('buildSystemPrompt retorna fallback quando company_settings está vazio', async () => {
   mockGetCompanySettings.mockResolvedValue(null);
   const prompt = await buildSystemPrompt();

@@ -4,7 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { getPool } from '@/lib/db';
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function PATCH(req: Request, { params }: Params) {
@@ -13,6 +13,7 @@ export async function PATCH(req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { id } = await params;
   const { name, color, position } = await req.json();
   const pool = getPool();
 
@@ -36,7 +37,7 @@ export async function PATCH(req: Request, { params }: Params) {
     return NextResponse.json({ error: 'nothing to update' }, { status: 400 });
   }
 
-  values.push(params.id);
+  values.push(id);
   const { rows } = await pool.query(
     `UPDATE stages SET ${sets.join(', ')} WHERE id = $${values.length} RETURNING *`,
     values
@@ -55,18 +56,19 @@ export async function DELETE(_req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { id } = await params;
   const pool = getPool();
   const { rows: firstStage } = await pool.query(
     'SELECT id FROM stages WHERE id != $1 ORDER BY position ASC LIMIT 1',
-    [params.id]
+    [id]
   );
   const fallbackId = firstStage[0]?.id || null;
 
   await pool.query('UPDATE leads SET stage_id = $1 WHERE stage_id = $2', [
     fallbackId,
-    params.id,
+    id,
   ]);
-  await pool.query('DELETE FROM stages WHERE id = $1', [params.id]);
+  await pool.query('DELETE FROM stages WHERE id = $1', [id]);
 
   return new NextResponse(null, { status: 204 });
 }

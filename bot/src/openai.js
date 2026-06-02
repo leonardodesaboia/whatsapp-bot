@@ -60,7 +60,7 @@ Responda apenas dúvidas relacionadas à ${company.nome}. Se a pergunta não for
 INSTRUÇÕES ESPECIAIS — responda APENAS com o token abaixo (sem texto adicional) quando detectar estas intenções:
 - Cliente quer falar com humano/atendente → responda exatamente: __TRANSFER__
 - Cliente quer ver produtos, serviços, cardápio ou catálogo → responda exatamente: __CATALOG__
-- Cliente quer agendar, marcar horário ou fazer reserva → responda exatamente: __SCHEDULE__
+- Cliente quer agendar, marcar horário, fazer reserva, reunião, conversa ou call → responda exatamente: __SCHEDULE__. Não exija produto/serviço antes; o fluxo pode marcar uma reunião simples.
 - Cliente quer pagar, gerar Pix ou fazer pagamento (menciona valor) → responda exatamente: __PAYMENT__:{valor_numerico}:{descricao}
   Exemplo: cliente diz "quero pagar R$ 50 pelo corte" → __PAYMENT__:50.00:Corte de cabelo`;
 }

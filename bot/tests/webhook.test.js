@@ -298,11 +298,22 @@ test('extractMessage lê título de listMessage (bot enviando lista)', () => {
   expect(extractMessage(data)).toBe('[lista: O que você procura?]');
 });
 
-test('roteia para handleSchedulingFlow quando flow=scheduling', async () => {
+test('roteia para handleSchedulingFlow com contactName quando flow=scheduling', async () => {
   getState.mockResolvedValue({ mode: 'bot', flow: 'scheduling', step: 1, data: {} });
-  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  const payloadWithName = {
+    ...validPayload,
+    data: { ...validPayload.data, pushName: 'João Silva' },
+  };
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(payloadWithName).expect(200);
   await new Promise((r) => setTimeout(r, 100));
-  expect(handleSchedulingFlow).toHaveBeenCalledWith('5511999999999', expect.objectContaining({ flow: 'scheduling' }), 'Qual o horário de atendimento?');
+  expect(handleSchedulingFlow).toHaveBeenCalledWith(
+    '5511999999999',
+    expect.objectContaining({
+      flow: 'scheduling',
+      data: expect.objectContaining({ contactName: 'João Silva' }),
+    }),
+    'Qual o horário de atendimento?'
+  );
 });
 
 test('roteia para handlePaymentFlow quando flow=payment', async () => {
@@ -316,10 +327,22 @@ test('detecta __SCHEDULE__ e inicia flow de agendamento', async () => {
   getHistory.mockResolvedValue([]);
   chat.mockResolvedValue('__SCHEDULE__');
   setState.mockResolvedValue(undefined);
-  await request(app).post('/webhook').set('x-api-key', 'test-token').send(validPayload).expect(200);
+  const payloadWithName = {
+    ...validPayload,
+    data: { ...validPayload.data, pushName: 'João Silva' },
+  };
+  await request(app).post('/webhook').set('x-api-key', 'test-token').send(payloadWithName).expect(200);
   await new Promise((r) => setTimeout(r, 100));
-  expect(setState).toHaveBeenCalledWith('5511999999999', { flow: 'scheduling', step: 0, data: {} });
-  expect(handleSchedulingFlow).toHaveBeenCalled();
+  expect(setState).toHaveBeenCalledWith('5511999999999', {
+    flow: 'scheduling',
+    step: 0,
+    data: { contactName: 'João Silva' },
+  });
+  expect(handleSchedulingFlow).toHaveBeenCalledWith(
+    '5511999999999',
+    expect.objectContaining({ data: { contactName: 'João Silva' } }),
+    'Qual o horário de atendimento?'
+  );
 });
 
 test('detecta __PAYMENT__ e inicia flow de pagamento', async () => {

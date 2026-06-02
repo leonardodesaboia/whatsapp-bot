@@ -3,11 +3,12 @@ import { NextResponse } from 'next/server';
 import { authOptions } from '@/lib/auth';
 import { getPool } from '@/lib/db';
 
-interface Params { params: { id: string } }
+interface Params { params: Promise<{ id: string }> }
 
 export async function GET(_req: Request, { params }: Params) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { id } = await params;
 
   const pool = getPool();
   const { rows } = await pool.query(
@@ -22,7 +23,7 @@ export async function GET(_req: Request, { params }: Params) {
      WHERE e.campaign_id = $1
      ORDER BY e.enrolled_at DESC
      LIMIT 100`,
-    [params.id]
+    [id]
   );
   return NextResponse.json(rows);
 }

@@ -11,7 +11,7 @@ const { sendNotification } = require('./notify');
 const { rescheduleAllReminders } = require('./scheduling');
 const { sendBroadcast } = require('./broadcast');
 const { rescheduleRemarketing } = require('./remarketing');
-const { clearState } = require('./state');
+const { clearState, setHumanMode } = require('./state');
 
 const app = express();
 app.use(express.json());

@@ -8,7 +8,7 @@ import InteractionTimeline from '@/components/InteractionTimeline';
 import LeadActions from '@/components/LeadActions';
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 const INTERACTIONS_PAGE_SIZE = 20;
@@ -19,19 +19,20 @@ export default async function LeadDetailPage({ params }: Props) {
     redirect('/login');
   }
 
+  const { id } = await params;
   const pool = getPool();
   const [leadResult, interactionsCountResult, interactionsResult, stagesResult] =
     await Promise.all([
     pool.query(
       'SELECT l.*, s.name AS stage_name FROM leads l LEFT JOIN stages s ON l.stage_id = s.id WHERE l.id = $1',
-      [params.id]
+      [id]
     ),
     pool.query('SELECT COUNT(*)::int AS count FROM interactions WHERE lead_id = $1', [
-      params.id,
+      id,
     ]),
     pool.query(
       'SELECT * FROM interactions WHERE lead_id = $1 ORDER BY created_at DESC LIMIT $2',
-      [params.id, INTERACTIONS_PAGE_SIZE]
+      [id, INTERACTIONS_PAGE_SIZE]
     ),
     pool.query('SELECT * FROM stages ORDER BY position ASC'),
   ]);

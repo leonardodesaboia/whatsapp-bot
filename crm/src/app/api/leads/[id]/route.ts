@@ -5,7 +5,7 @@ import { getPool } from '@/lib/db';
 import { normalizeTags } from '@/lib/leadUtils';
 
 interface Params {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function GET(_req: Request, { params }: Params) {
@@ -14,6 +14,7 @@ export async function GET(_req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { id } = await params;
   const { searchParams } = new URL(_req.url);
   const rawPage = parseInt(searchParams.get('page') || '1', 10);
   const rawLimit = parseInt(searchParams.get('limit') || '20', 10);
@@ -28,15 +29,15 @@ export async function GET(_req: Request, { params }: Params) {
   const [leadResult, interactionsCountResult, interactionsResult] = await Promise.all([
     pool.query(
       'SELECT l.*, s.name AS stage_name FROM leads l LEFT JOIN stages s ON l.stage_id = s.id WHERE l.id = $1',
-      [params.id]
+      [id]
     ),
     pool.query(
       'SELECT COUNT(*)::int AS count FROM interactions WHERE lead_id = $1',
-      [params.id]
+      [id]
     ),
     pool.query(
       'SELECT * FROM interactions WHERE lead_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3',
-      [params.id, limit, offset]
+      [id, limit, offset]
     ),
   ]);
 
@@ -67,6 +68,7 @@ export async function PATCH(req: Request, { params }: Params) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const { id } = await params;
   const body = await req.json();
   if ('tags' in body) {
     if (typeof body.tags === 'string') {
@@ -102,7 +104,7 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   sets.push('updated_at = NOW()');
-  values.push(params.id);
+  values.push(id);
 
   const pool = getPool();
   const { rows } = await pool.query(
