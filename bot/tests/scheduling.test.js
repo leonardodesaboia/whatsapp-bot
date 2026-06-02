@@ -72,6 +72,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   delete process.env.GOOGLE_CREDENTIALS_JSON;
   delete process.env.GOOGLE_CREDENTIALS_BASE64;
+  delete process.env.SCHEDULING_LOOKAHEAD_DAYS;
   mockGetCompanySettings.mockResolvedValue({
     timezone: 'America/Sao_Paulo',
     business_hours: {

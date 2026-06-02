@@ -9,7 +9,9 @@ const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID;
 const DAY_MAP = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 const DEFAULT_MEETING_SERVICE = 'Reunião';
 const DEFAULT_DURATION_MINUTES = 60;
+const DEFAULT_LOOKAHEAD_DAYS = 14;
 const GENERIC_MEETING_INTENT = /\b(agendar|agenda|marcar|reuni[aã]o|call|conversa|hor[aá]rio|reserva)\b/i;
+let googleCredentialsStatusLogged = false;
 
 function normalizePersonName(name) {
   return String(name || '').trim().replace(/\s+/g, ' ');
@@ -48,6 +50,23 @@ function loadGoogleCredentials() {
 async function getAuth() {
   const authConfig = { scopes: ['https://www.googleapis.com/auth/calendar'] };
   const credentials = loadGoogleCredentials();
+  if (!googleCredentialsStatusLogged) {
+    const source = process.env.GOOGLE_CREDENTIALS_BASE64
+      ? 'GOOGLE_CREDENTIALS_BASE64'
+      : process.env.GOOGLE_CREDENTIALS_JSON
+        ? 'GOOGLE_CREDENTIALS_JSON'
+        : process.env.GOOGLE_APPLICATION_CREDENTIALS
+          ? 'GOOGLE_APPLICATION_CREDENTIALS'
+          : 'none';
+    console.log('[Google Calendar] credentials status:', {
+      source,
+      loadedFromEnv: Boolean(credentials),
+      hasClientEmail: Boolean(credentials?.client_email),
+      hasPrivateKey: Boolean(credentials?.private_key),
+      keyFileConfigured: Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS),
+    });
+    googleCredentialsStatusLogged = true;
+  }
   if (credentials) {
     authConfig.credentials = credentials;
   }
@@ -86,8 +105,8 @@ async function getAvailableSlots(date, durationMinutes) {
 
   const localDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
   const dayKey = DAY_MAP[localDate.getDay()];
-  // null = 24h mode → use default hours; structured = use configured hours (null day = closed)
-  const daySchedule = businessHours === null ? DEFAULT_DAY_SCHEDULE : (businessHours?.[dayKey] ?? null);
+  // null = 24h mode -> use default hours; structured = use configured hours (null day = closed)
+  const daySchedule = businessHours == null ? DEFAULT_DAY_SCHEDULE : (businessHours?.[dayKey] ?? null);
   if (!daySchedule) return [];
 
   const auth = await getAuth();
@@ -209,7 +228,9 @@ async function rescheduleAllReminders() {
 async function showAvailableSlots(phone, state, durationMinutes) {
   const slots = [];
   const today = new Date();
-  for (let day = 0; day < 3 && slots.length < 5; day++) {
+  const lookaheadDays = parseInt(process.env.SCHEDULING_LOOKAHEAD_DAYS || String(DEFAULT_LOOKAHEAD_DAYS), 10);
+  const daysToSearch = Number.isFinite(lookaheadDays) && lookaheadDays > 0 ? lookaheadDays : DEFAULT_LOOKAHEAD_DAYS;
+  for (let day = 0; day < daysToSearch && slots.length < 5; day++) {
     const date = new Date(today);
     date.setDate(date.getDate() + day);
     const daySlots = await getAvailableSlots(date, durationMinutes || 60);
@@ -218,7 +239,7 @@ async function showAvailableSlots(phone, state, durationMinutes) {
   const available = slots.slice(0, 5);
   if (available.length === 0) {
     await clearState(phone);
-    await sendText(phone, 'Não há horários disponíveis nos próximos 3 dias. Entre em contato diretamente.');
+    await sendText(phone, `Não há horários disponíveis nos próximos ${daysToSearch} dias. Entre em contato diretamente.`);
     return;
   }
   await setState(phone, { ...state, step: 2, data: { ...state.data, slots: available } });
